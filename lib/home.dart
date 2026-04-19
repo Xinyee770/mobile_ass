@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
 import 'profile.dart';
 import 'schedule.dart';
 import 'payment.dart';
 import 'admin.dart';
+//Testing
 
 class Home extends StatelessWidget {
   const Home ({super.key});
@@ -29,14 +29,14 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  //int _counter = 0;
 
-  void _incrementCounter() {
-    setState(() {
+  //void _incrementCounter() {
+   // setState(() {
 
-      _counter++;
-    });
-  }
+      //_counter++;
+    //});
+  //}
 
   @override
   Widget build(BuildContext context) {
@@ -83,11 +83,11 @@ class _MyHomePageState extends State<MyHomePage> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+      //floatingActionButton: FloatingActionButton(
+        //onPressed: _incrementCounter,
+        //tooltip: 'Increment',
+        //child: const Icon(Icons.add),
+      //),
     );
   }
 }
