@@ -3,6 +3,7 @@ import 'profile.dart';
 import 'schedule.dart';
 import 'payment.dart';
 import 'admin.dart';
+import 'classes.dart';
 //Testing
 
 class Home extends StatelessWidget {
@@ -16,7 +17,7 @@ class Home extends StatelessWidget {
       theme: ThemeData(
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'ABC APP'),
     );
   }
 }
@@ -79,6 +80,13 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Admin())),
               icon: const Icon(Icons.admin_panel_settings),
               label: const Text('Admin'),
+            ),
+
+            // 5. Classes
+            ElevatedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Classes())),
+              icon: const Icon(Icons.settings),
+              label: const Text('Classes'),
             ),
           ],
         ),
