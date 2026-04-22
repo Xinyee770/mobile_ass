@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'profile.dart';
-import 'schedule.dart';
+import 'booking.dart';
 import 'payment.dart';
 import 'admin.dart';
 import 'classes.dart';
@@ -63,7 +63,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
             // 2. Calendar Button
             ElevatedButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Schedule())),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingPage())),
               icon: const Icon(Icons.calendar_month),
               label: const Text('Calendar'),
             ),
