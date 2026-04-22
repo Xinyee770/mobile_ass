@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'payment.dart';
 
 class BookingPage extends StatefulWidget {
   const BookingPage({super.key});
@@ -43,16 +44,12 @@ class _BookingPageState extends State<BookingPage> {
   // 3. The Database function
   Future<void> confirmBooking() async {
     try {
-      // 1. Set your default year
       String year = "2026";
-
-      // 2. Format the month and day (Adding fallback to '01' just in case)
       String formattedMonth = (_selectedMonth ?? '01').padLeft(2, '0');
       String formattedDay = (_selectedDay ?? '01').padLeft(2, '0');
-
-      // 3. Create the separate Date string
       String finalDate = "$year-$formattedMonth-$formattedDay";
 
+      // 1. Insert and get the new row back
       final List<dynamic> response = await supabase.from('booking').insert({
         'course_id': 2,
         'booking_date': finalDate,
@@ -62,24 +59,33 @@ class _BookingPageState extends State<BookingPage> {
         'location': _selectedLocation,
       }).select();
 
-      // ID Formatting
       if (response.isNotEmpty) {
         final newRow = response[0];
-        int newId = newRow['booking_id'];
+        int newId = newRow['booking_id']; // This is the raw integer for the DB
 
-        String formattedId = "B${newId.toString().padLeft(4, '0')}";
+        // Just for the SnackBar message
+        String formattedIdForDisplay = "B${newId.toString().padLeft(4, '0')}";
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Success! Booking ID: $formattedId saved.")),
+            SnackBar(content: Text("Success! Booking ID: $formattedIdForDisplay saved.")),
           );
-          Navigator.pop(context);
+
+          // 2. Pass the baton to the Payment Page
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => Payment(bookingId: newId),
+            ),
+          );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     }
   }
 

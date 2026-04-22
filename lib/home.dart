@@ -69,11 +69,11 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
 
             // 3. Payment Button
-            ElevatedButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Payment())),
-              icon: const Icon(Icons.payment),
-              label: const Text('Payment'),
-            ),
+            // ElevatedButton.icon(
+            //   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const Payment())),
+            //   icon: const Icon(Icons.payment),
+            //   label: const Text('Payment'),
+            // ),
 
             // 4. Admin Button
             ElevatedButton.icon(
