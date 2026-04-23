@@ -2,25 +2,41 @@ import 'package:flutter/material.dart';
 import 'Profile_UI/profile.dart';
 import 'Booking_UI/booking.dart';
 import 'Payment_UI/payment_read.dart';
+import 'Payment_UI/wallet_topup.dart';
+import 'Payment_UI/wallet_history.dart';
 import 'Admin_UI/admin.dart';
 import 'Classes_UI/classes.dart';
+import 'services/wallet_service.dart';
 
 class Home extends StatelessWidget {
   const Home({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // --- BRAND COLORS FROM YOUR DESIGN ---
+    const Color brandPurple = Color(0xFF9D59FF); // Electric Purple
+    const Color bgDeep = Color(0xFF0F0F16);      // Deep dark background
+    const Color cardGrey = Color(0xFF1E1E2C);    // Charcoal surface color
+
     return MaterialApp(
       title: 'ABC APP',
       debugShowCheckedModeBanner: false,
-      // --- DARK THEME SETUP ---
       theme: ThemeData(
         useMaterial3: true,
+        // Using a dark brightness and our brand purple as the seed
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark, // This triggers the Dark Mode
+          seedColor: brandPurple,
+          primary: brandPurple,
+          brightness: Brightness.dark,
+          surface: cardGrey,
         ),
-        scaffoldBackgroundColor: const Color(0xFF121212), // Deep black background
+        scaffoldBackgroundColor: bgDeep,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
       ),
       home: const MyHomePage(title: 'ABC APP'),
     );
@@ -36,117 +52,178 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  double walletBalance = 0.00; // This will update from Supabase later
+  final WalletService _walletService = WalletService();
+  double walletBalance = 0.00;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWallet();
+  }
+
+  Future<void> _loadWallet() async {
+    final balance = await _walletService.getBalance();
+    if (mounted) {
+      setState(() => walletBalance = balance);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent, // Blends into the dark background
-        elevation: 0,
-        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
+      onDrawerChanged: (isOpen) => isOpen ? _loadWallet() : null,
+      appBar: AppBar(title: Text(widget.title)),
 
-      // --- DRAWER WITH DARK THEME & WALLET ---
+      // --- REDESIGNED DRAWER ---
       drawer: Drawer(
-        backgroundColor: const Color(0xFF1E1E1E), // Slightly lighter dark for the drawer
+        backgroundColor: const Color(0xFF161622),
         child: Column(
           children: [
-            UserAccountsDrawerHeader(
-              decoration: BoxDecoration(
-                color: theme.primaryContainer.withOpacity(0.5), // Subtle purple tint
-              ),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: theme.primary,
-                child: const Icon(Icons.person, size: 40, color: Colors.white),
-              ),
-              accountName: const Text(
-                "Welcome Back!",
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              // THE WALLET CHIP
-              accountEmail: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.primary.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: theme.primary.withOpacity(0.5)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.account_balance_wallet, size: 14, color: Colors.amber),
-                    const SizedBox(width: 6),
-                    Text(
-                      "RM ${walletBalance.toStringAsFixed(2)}",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildDrawerHeader(theme),
+            const SizedBox(height: 10),
 
-            // Navigation Items
+            // Nav Items
             _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
+            _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
+            _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()), // Using the new unique class name),
             _buildDrawerItem(Icons.calendar_month_outlined, 'Calendar', const BookingPage()),
-            _buildDrawerItem(Icons.account_balance_wallet_outlined, 'Payment History', const PaymentHistoryPage()),
+            _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
 
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Divider(color: Colors.white10),
             ),
 
             _buildDrawerItem(Icons.admin_panel_settings_outlined, 'Admin Panel', const Admin()),
-            _buildDrawerItem(Icons.settings_outlined, 'Classes', const Classes()),
+            _buildDrawerItem(Icons.auto_awesome_motion, 'Classes', const Classes()),
+
+            const Spacer(),
+            const Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Text("v1.0.4", style: TextStyle(color: Colors.white24, fontSize: 12)),
+            )
           ],
         ),
       ),
 
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // A glowing effect for the dashboard icon
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.primary.withOpacity(0.2),
-                    blurRadius: 40,
-                    spreadRadius: 10,
-                  ),
-                ],
+      body: _buildDashboardBody(theme),
+    );
+  }
+
+  // Custom Drawer Header to match your "Receipt Scan" look
+  Widget _buildDrawerHeader(ColorScheme theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 25),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E2C),
+        border: Border(bottom: BorderSide(color: theme.primary.withOpacity(0.1))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: theme.primary.withOpacity(0.1),
+                child: Icon(Icons.person, color: theme.primary, size: 30),
               ),
-              child: Icon(Icons.dashboard_rounded, size: 100, color: theme.primary),
+              const SizedBox(width: 15),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Hello,", style: TextStyle(color: Colors.white54, fontSize: 14)),
+                  Text("User One", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(height: 20),
+          // WALLET CHIP
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black26,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: theme.primary.withOpacity(0.3)),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'ABC Dashboard',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.account_balance_wallet, size: 18, color: theme.primary),
+                    const SizedBox(width: 10),
+                    const Text("Balance", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  ],
+                ),
+                Text(
+                  "RM ${walletBalance.toStringAsFixed(2)}",
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Swipe from left to navigate',
-              style: TextStyle(color: theme.onSurfaceVariant),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // Helper method for clean code
+  Widget _buildDashboardBody(ColorScheme theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Dashboard Icon with Pulse Glow
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: theme.primary.withOpacity(0.05),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.primary.withOpacity(0.1),
+                  blurRadius: 50,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Icon(Icons.grid_view_rounded, size: 80, color: theme.primary),
+          ),
+          const SizedBox(height: 30),
+          const Text(
+            'ABC Dashboard',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text(
+              'Swipe for Menu',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDrawerItem(IconData icon, String label, Widget destination) {
     return ListTile(
-      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
-      title: Text(label, style: const TextStyle(color: Colors.white70)),
-      onTap: () {
-        Navigator.pop(context); // Closes drawer
-        Navigator.push(context, MaterialPageRoute(builder: (context) => destination));
+      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary.withOpacity(0.7), size: 22),
+      title: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 15)),
+      onTap: () async {
+        Navigator.pop(context);
+        await Navigator.push(context, MaterialPageRoute(builder: (context) => destination));
+        _loadWallet();
       },
     );
   }
