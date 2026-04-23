@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:confetti/confetti.dart';
 import '../services/payment_service.dart';
+import '../utils/ui_helpers.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'dart:io'; // Needed for File
-import 'package:path_provider/path_provider.dart'; // Needed for folder access
-import 'package:share_plus/share_plus.dart'; // Needed for the share menu
 
 class Payment extends StatefulWidget {
   final int bookingId;
@@ -17,240 +15,206 @@ class Payment extends StatefulWidget {
 class _PaymentState extends State<Payment> {
   final PaymentService _service = PaymentService();
   final LocalAuthentication auth = LocalAuthentication();
+  late ConfettiController _confettiController;
 
-  // Track selected method
+  int? _pendingPaymentId;
   String _selectedMethod = 'Credit Card';
+
+  // --- Fintech Dark Theme Colors ---
+  final Color bgDark = const Color(0xFF0F111A);     // Deep Navy Background
+  final Color surfaceDark = const Color(0xFF1A1D29); // Card Surface
+  final Color primaryPurple = const Color(0xFF9D59FF); // Brand Purple
+  final Color textMuted = const Color(0xFF9496A1);    // Muted Grey Text
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+  }
+
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
+
+  // --- PAYMENT LOGIC ---
 
   Future<void> _handlePayment(BuildContext context, double amount, Map<String, dynamic> data) async {
     try {
-      // 1. Basic Check
       bool canCheck = await auth.canCheckBiometrics;
       bool isSupported = await auth.isDeviceSupported();
 
       if (canCheck || isSupported) {
-        // 2. Simple Authentication
-        // We pass the settings directly into the function
         bool didAuthenticate = await auth.authenticate(
           localizedReason: 'Please authenticate to complete your payment',
           biometricOnly: false,
-          persistAcrossBackgrounding: true, // This is what your version calls 'stickyAuth'
+          persistAcrossBackgrounding: true,
         );
         if (!didAuthenticate) return;
       }
 
-      // 3. Database logic
-      await _service.processPayment(
+      await _service.completePayment(
+        paymentId: _pendingPaymentId!,
         bookingId: widget.bookingId,
-        amount: amount,
         method: _selectedMethod,
       );
 
-      _showAdvancedSuccess(context, amount, data);
+      final receiptData = Map<String, dynamic>.from(data);
+      receiptData['payment_id'] = _pendingPaymentId;
+      receiptData['payment_method'] = _selectedMethod;
+      receiptData['amount'] = amount;
+
+      _confettiController.play();
+      _showAdvancedSuccess(context, amount, receiptData);
 
     } catch (e) {
-      // If the code above still fails, it's likely a platform setup error
-      _showSnack(context, "Security Error: $e", isError: true);
+      UIHelpers.showSnack(context, "Security Error: $e", isError: true);
     }
   }
 
-  void _showAdvancedSuccess(BuildContext context, double amount, Map<String, dynamic> data) {
-    // 1. Capture the "Main Screen" Navigator before entering the dialog builder
+  // --- SUCCESS UI ---
+
+  void _showAdvancedSuccess(BuildContext context, double amount, Map<String, dynamic> receiptData) {
     final mainNavigator = Navigator.of(context);
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => Dialog( // Note: changed name to dialogContext to avoid confusion
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.verified, color: Colors.blueAccent, size: 90),
-              const SizedBox(height: 20),
-              const Text("Transaction Secured",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text("RM ${amount.toStringAsFixed(2)}",
-                  style: const TextStyle(fontSize: 28, color: Colors.blueAccent, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 15),
-              const Divider(),
-              const SizedBox(height: 15),
-              _buildInfoRow("Auth Method", "Biometric ID"),
-              _buildInfoRow("Status", "Success"),
-              const SizedBox(height: 30),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  // 2. Close the Dialog using the dialog's context
-                  Navigator.of(dialogContext).pop();
-
-                  // 3. Use the mainNavigator we saved earlier to go back to Home
-                  mainNavigator.popUntil((route) => route.isFirst);
-                },
-                child: const Text("Return to Dashboard"),
-              ),
-              const SizedBox(height: 12),
-              // Inside your _showAdvancedSuccess function
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey[200],
-                  foregroundColor: Colors.black,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                onPressed: () => shareReceipt(data, amount, _selectedMethod),
-                icon: const Icon(Icons.share), // Changed icon to share
-                label: const Text("Share / Save Receipt"), // Changed label
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> shareReceipt(Map<String, dynamic> data, double amount, String method) async {
-    try {
-      final pdf = pw.Document();
-
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Header(level: 0, child: pw.Text("OFFICIAL RECEIPT")),
-                pw.SizedBox(height: 20),
-                pw.Text("Transaction ID: TXN-${DateTime.now().millisecondsSinceEpoch}"),
-                pw.Text("Date: ${DateTime.now().toString()}"),
-                pw.Divider(),
-                pw.SizedBox(height: 10),
-                pw.Text("Course: ${data['courses']['course_name']}"),
-                pw.Text("Booking ID: #${data['id']}"),
-                pw.Text("Location: ${data['location']}"),
-                pw.Text("Payment Method: $method"),
-                pw.SizedBox(height: 20),
-                pw.Align(
-                  alignment: pw.Alignment.centerRight,
-                  child: pw.Text("Total Paid: RM ${amount.toStringAsFixed(2)}",
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 20)),
-                ),
-                pw.SizedBox(height: 40),
-                pw.Center(child: pw.Text("Thank you for your booking!")),
-              ],
-            );
-          },
-        ),
-      );
-
-      // 1. Get a temporary directory to save the file
-      final output = await getTemporaryDirectory();
-      final file = File("${output.path}/Receipt_${data['id']}.pdf");
-
-      // 2. Write the PDF to that file
-      await file.writeAsBytes(await pdf.save());
-
-      // 3. Open the Share Sheet
-      await Share.shareXFiles([XFile(file.path)], text: 'My Booking Receipt');
-
-    } catch (e) {
-      debugPrint("Error sharing PDF: $e");
-    }
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (dialogContext) => Stack(
+        alignment: Alignment.topCenter,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Dialog(
+            backgroundColor: surfaceDark,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.verified, color: Colors.green, size: 90),
+                  const SizedBox(height: 20),
+                  const Text("Transaction Secured",
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text("RM ${amount.toStringAsFixed(2)}",
+                      style: TextStyle(fontSize: 28, color: primaryPurple, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 15),
+                  Divider(color: Colors.white10),
+                  _buildDetailRow("Auth Method", "Biometric ID"),
+                  _buildDetailRow("Status", "Success"),
+                  const SizedBox(height: 30),
+
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryPurple,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      mainNavigator.popUntil((route) => route.isFirst);
+                    },
+                    child: const Text("Return to Dashboard"),
+                  ),
+                  const SizedBox(height: 12),
+
+                  TextButton.icon(
+                    onPressed: () => _service.shareReceipt(receiptData),
+                    icon: Icon(Icons.share, color: primaryPurple, size: 18),
+                    label: Text("Export PDF Receipt", style: TextStyle(color: primaryPurple)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ConfettiWidget(
+            confettiController: _confettiController,
+            blastDirectionality: BlastDirectionality.explosive,
+            shouldLoop: false,
+            colors: [primaryPurple, Colors.white, Colors.deepPurpleAccent],
+            numberOfParticles: 20,
+            gravity: 0.1,
+          ),
         ],
       ),
     );
   }
 
-  void _showSnack(BuildContext context, String msg, {required bool isError}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: isError ? Colors.red : Colors.green),
-    );
-  }
-
-  String formatTime(String? time) {
-    if (time == null) return "N/A";
-    return time.length >= 5 ? time.substring(0, 5) : time;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(title: const Text("Checkout"), centerTitle: true),
+      backgroundColor: bgDark,
+      appBar: AppBar(
+        title: const Text("Checkout", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        backgroundColor: bgDark,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: FutureBuilder<Map<String, dynamic>>(
         future: _service.getBookingDetails(widget.bookingId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator(color: primaryPurple));
           }
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
+          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.white)));
 
           final data = snapshot.data!;
           final price = (data['courses']['course_price'] as num).toDouble();
+
+          if (_pendingPaymentId == null) {
+            _service.createPendingPayment(bookingId: widget.bookingId, amount: price).then((id) {
+              if (mounted && _pendingPaymentId == null) {
+                setState(() => _pendingPaymentId = id);
+              }
+            });
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Order Summary", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text("Order Summary", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 15),
-
-                // Summary Card
-                Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      children: [
-                        _buildSummaryHeader(data['courses']['course_name'], price),
-                        const Divider(height: 30),
-                        _buildRow("Booking ID", "#${widget.bookingId}"),
-                        _buildRow("Location", data['location'] ?? "Main Studio"),
-                        _buildRow("Date", data['booking_date'] ?? "TBD"),
-                        _buildRow("Time", "${formatTime(data['start_time'])} - ${formatTime(data['end_time'])}"),
-                        const Divider(height: 30),
-                        _buildTotalRow(price),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: surfaceDark,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildSummaryHeader(data['courses']['course_name'], price),
+                      Divider(height: 30, color: Colors.white10),
+                      _buildDetailRow("Booking ID", "#${widget.bookingId}"),
+                      _buildDetailRow("Location", data['location'] ?? "Main Studio"),
+                      _buildDetailRow("Date", data['booking_date'] ?? "TBD"),
+                      _buildDetailRow("Time", "${UIHelpers.formatTime(data['start_time'])} - ${UIHelpers.formatTime(data['end_time'])}"),
+                      Divider(height: 30, color: Colors.white10),
+                      _buildDetailRow("Total Pay", "RM ${price.toStringAsFixed(2)}", isTotal: true),
+                    ],
                   ),
                 ),
-
                 const SizedBox(height: 25),
-                const Text("Payment_UI Method", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text("Payment Method", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 15),
-
-                // Selector Buttons
                 _buildMethodTile(Icons.credit_card, "Credit Card"),
                 _buildMethodTile(Icons.account_balance_wallet, "GrabPay"),
                 _buildMethodTile(Icons.qr_code_scanner, "TNG eWallet"),
-
                 const SizedBox(height: 30),
-
                 SizedBox(
                   width: double.infinity,
                   height: 60,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
+                      backgroundColor: primaryPurple,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
-                    onPressed: () => _handlePayment(context, price,data),
+                    onPressed: () => _handlePayment(context, price, data),
                     child: const Text("Pay Now", style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -262,27 +226,49 @@ class _PaymentState extends State<Payment> {
     );
   }
 
+  // --- DARK MODE HELPERS ---
+
   Widget _buildMethodTile(IconData icon, String method) {
     bool isSelected = _selectedMethod == method;
     return GestureDetector(
       onTap: () => setState(() => _selectedMethod = method),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(15),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.withOpacity(0.1) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? Colors.blueAccent : Colors.grey[300]!, width: isSelected ? 2 : 1),
+          color: isSelected ? primaryPurple.withOpacity(0.1) : surfaceDark,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+              color: isSelected ? primaryPurple : Colors.white10,
+              width: isSelected ? 2 : 1
+          ),
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? Colors.blueAccent : Colors.grey),
+            Icon(icon, color: isSelected ? primaryPurple : textMuted),
             const SizedBox(width: 15),
-            Text(method, style: const TextStyle(fontSize: 16)),
+            Text(method, style: const TextStyle(fontSize: 16, color: Colors.white)),
             const Spacer(),
-            if (isSelected) const Icon(Icons.check_circle, color: Colors.blueAccent),
+            if (isSelected) Icon(Icons.check_circle, color: primaryPurple),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, {bool isTotal = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: textMuted, fontSize: 14)),
+          Text(value, style: TextStyle(
+            color: isTotal ? primaryPurple : Colors.white,
+            fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+            fontSize: isTotal ? 18 : 14,
+          )),
+        ],
       ),
     );
   }
@@ -291,31 +277,8 @@ class _PaymentState extends State<Payment> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text("RM ${price.toStringAsFixed(2)}", style: const TextStyle(fontSize: 18, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
-  Widget _buildRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey[600])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTotalRow(double price) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text("Total Pay", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        Text("RM ${price.toStringAsFixed(2)}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text("RM ${price.toStringAsFixed(2)}", style: TextStyle(fontSize: 18, color: primaryPurple, fontWeight: FontWeight.bold)),
       ],
     );
   }
