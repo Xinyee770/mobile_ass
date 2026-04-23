@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'services/payment_service.dart';
+import '../services/payment_service.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:local_auth_android/local_auth_android.dart';
 
@@ -42,7 +42,7 @@ class _PaymentState extends State<Payment> {
         method: _selectedMethod,
       );
 
-      _showSnack(context, "Payment Successful!", isError: false);
+      _showSnack(context, "Payment_UI Successful!", isError: false);
       Future.delayed(const Duration(seconds: 2), () => Navigator.pop(context));
 
     } catch (e) {
@@ -107,7 +107,7 @@ class _PaymentState extends State<Payment> {
                 ),
 
                 const SizedBox(height: 25),
-                const Text("Payment Method", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text("Payment_UI Method", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
 
                 // Selector Buttons
