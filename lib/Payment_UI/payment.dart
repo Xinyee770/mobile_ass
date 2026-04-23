@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/payment_service.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth_android/local_auth_android.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'dart:io'; // Needed for File
+import 'package:path_provider/path_provider.dart'; // Needed for folder access
+import 'package:share_plus/share_plus.dart'; // Needed for the share menu
 
 class Payment extends StatefulWidget {
   final int bookingId;
@@ -18,7 +21,7 @@ class _PaymentState extends State<Payment> {
   // Track selected method
   String _selectedMethod = 'Credit Card';
 
-  Future<void> _handlePayment(BuildContext context, double amount) async {
+  Future<void> _handlePayment(BuildContext context, double amount, Map<String, dynamic> data) async {
     try {
       // 1. Basic Check
       bool canCheck = await auth.canCheckBiometrics;
@@ -42,13 +45,135 @@ class _PaymentState extends State<Payment> {
         method: _selectedMethod,
       );
 
-      _showSnack(context, "Payment_UI Successful!", isError: false);
-      Future.delayed(const Duration(seconds: 2), () => Navigator.pop(context));
+      _showAdvancedSuccess(context, amount, data);
 
     } catch (e) {
       // If the code above still fails, it's likely a platform setup error
       _showSnack(context, "Security Error: $e", isError: true);
     }
+  }
+
+  void _showAdvancedSuccess(BuildContext context, double amount, Map<String, dynamic> data) {
+    // 1. Capture the "Main Screen" Navigator before entering the dialog builder
+    final mainNavigator = Navigator.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog( // Note: changed name to dialogContext to avoid confusion
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.verified, color: Colors.blueAccent, size: 90),
+              const SizedBox(height: 20),
+              const Text("Transaction Secured",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text("RM ${amount.toStringAsFixed(2)}",
+                  style: const TextStyle(fontSize: 28, color: Colors.blueAccent, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 15),
+              const Divider(),
+              const SizedBox(height: 15),
+              _buildInfoRow("Auth Method", "Biometric ID"),
+              _buildInfoRow("Status", "Success"),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  // 2. Close the Dialog using the dialog's context
+                  Navigator.of(dialogContext).pop();
+
+                  // 3. Use the mainNavigator we saved earlier to go back to Home
+                  mainNavigator.popUntil((route) => route.isFirst);
+                },
+                child: const Text("Return to Dashboard"),
+              ),
+              const SizedBox(height: 12),
+              // Inside your _showAdvancedSuccess function
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey[200],
+                  foregroundColor: Colors.black,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                onPressed: () => shareReceipt(data, amount, _selectedMethod),
+                icon: const Icon(Icons.share), // Changed icon to share
+                label: const Text("Share / Save Receipt"), // Changed label
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> shareReceipt(Map<String, dynamic> data, double amount, String method) async {
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.Page(
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Header(level: 0, child: pw.Text("OFFICIAL RECEIPT")),
+                pw.SizedBox(height: 20),
+                pw.Text("Transaction ID: TXN-${DateTime.now().millisecondsSinceEpoch}"),
+                pw.Text("Date: ${DateTime.now().toString()}"),
+                pw.Divider(),
+                pw.SizedBox(height: 10),
+                pw.Text("Course: ${data['courses']['course_name']}"),
+                pw.Text("Booking ID: #${data['id']}"),
+                pw.Text("Location: ${data['location']}"),
+                pw.Text("Payment Method: $method"),
+                pw.SizedBox(height: 20),
+                pw.Align(
+                  alignment: pw.Alignment.centerRight,
+                  child: pw.Text("Total Paid: RM ${amount.toStringAsFixed(2)}",
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 20)),
+                ),
+                pw.SizedBox(height: 40),
+                pw.Center(child: pw.Text("Thank you for your booking!")),
+              ],
+            );
+          },
+        ),
+      );
+
+      // 1. Get a temporary directory to save the file
+      final output = await getTemporaryDirectory();
+      final file = File("${output.path}/Receipt_${data['id']}.pdf");
+
+      // 2. Write the PDF to that file
+      await file.writeAsBytes(await pdf.save());
+
+      // 3. Open the Share Sheet
+      await Share.shareXFiles([XFile(file.path)], text: 'My Booking Receipt');
+
+    } catch (e) {
+      debugPrint("Error sharing PDF: $e");
+    }
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
   }
 
   void _showSnack(BuildContext context, String msg, {required bool isError}) {
@@ -125,7 +250,7 @@ class _PaymentState extends State<Payment> {
                       backgroundColor: Colors.blueAccent,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     ),
-                    onPressed: () => _handlePayment(context, price),
+                    onPressed: () => _handlePayment(context, price,data),
                     child: const Text("Pay Now", style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
