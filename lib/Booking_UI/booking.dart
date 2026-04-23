@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'payment.dart';
+import '../Payment_UI/payment.dart';
 
 class BookingPage extends StatefulWidget {
   const BookingPage({super.key});
@@ -71,7 +71,7 @@ class _BookingPageState extends State<BookingPage> {
             SnackBar(content: Text("Success! Booking ID: $formattedIdForDisplay saved.")),
           );
 
-          // 2. Pass the baton to the Payment Page
+          // 2. Pass the baton to the Payment_UI Page
           Navigator.push(
             context,
             MaterialPageRoute(

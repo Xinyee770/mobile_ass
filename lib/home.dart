@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'profile.dart';
-import 'booking.dart';
-import 'payment.dart';
-import 'admin.dart';
-import 'classes.dart';
+import 'Profile_UI/profile.dart';
+import 'Booking_UI/booking.dart';
+import 'Payment_UI/payment.dart';
+import 'Admin_UI/admin.dart';
+import 'Classes_UI/classes.dart';
 //Testing
 
 class Home extends StatelessWidget {
