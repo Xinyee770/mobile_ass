@@ -78,4 +78,37 @@ class WalletService {
       return [];
     }
   }
+
+  // Inside WalletService class
+  Future<bool> payWithWallet(double amount, String courseName) async {
+    try {
+      const String tempUserId = "1";
+
+      // 1. Get current balance
+      double currentBalance = await getBalance();
+
+      // 2. Check if they can afford it
+      if (currentBalance < amount) return false;
+
+      // 3. Update balance (Subtract)
+      double newBalance = currentBalance - amount;
+      await _supabase.from('wallets').update({
+        'balance': newBalance,
+      }).eq('user_id', tempUserId);
+
+      // 4. Log the transaction in Wallet History
+      await _supabase.from('wallet_transactions').insert({
+        'user_id': tempUserId,
+        'amount': -amount, // Negative indicates spending
+        'transaction_type': 'debit',
+        'category': 'payment',
+        'description': 'Paid for course: $courseName',
+      });
+
+      return true;
+    } catch (e) {
+      print("Wallet payment error: $e");
+      return false;
+    }
+  }
 }

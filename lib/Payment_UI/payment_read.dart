@@ -3,6 +3,7 @@ import 'package:confetti/confetti.dart';
 import '../services/payment_service.dart';
 import '../utils/ui_helpers.dart';
 import 'payment.dart';
+import 'package:local_auth/local_auth.dart';
 
 class PaymentHistoryPage extends StatefulWidget {
   const PaymentHistoryPage({super.key});
@@ -14,9 +15,12 @@ class PaymentHistoryPage extends StatefulWidget {
 class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   final PaymentService _service = PaymentService();
   late ConfettiController _confettiController;
+  final LocalAuthentication auth = LocalAuthentication();
 
+  // --- Filter & Sort States ---
   String _sortBy = 'Date (Newest)';
   String _filterStatus = 'All';
+  String _filterBookingStatus = 'All';
 
   // --- Theme Colors ---
   final Color bgDark = const Color(0xFF0F111A);
@@ -59,7 +63,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
           return Column(
             children: [
-              _buildFilterSection(),
+              _buildTopControls(), // The new Sort and Filter row
               Expanded(
                 child: filteredData.isEmpty
                     ? const Center(child: Text("No transactions match this filter", style: TextStyle(color: Colors.white)))
@@ -76,11 +80,155 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  // --- 2. DATA LOGIC ---
+  // --- 2. NEW TOP CONTROLS (Sort & Filter Button) ---
+  Widget _buildTopControls() {
+    bool hasActiveFilters = _filterStatus != 'All' || _filterBookingStatus != 'All';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: surfaceDark.withOpacity(0.5),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left Side: Sort Dropdown
+          Row(
+            children: [
+              Icon(Icons.swap_vert_rounded, size: 18, color: primaryPurple),
+              const SizedBox(width: 4),
+              DropdownButton<String>(
+                value: _sortBy,
+                dropdownColor: surfaceDark,
+                underline: const SizedBox(),
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                items: ['Date (Newest)', 'Date (Oldest)', 'Amount (High)', 'Amount (Low)']
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: (value) => setState(() => _sortBy = value!),
+              ),
+            ],
+          ),
+          // Right Side: Filter Button
+          TextButton.icon(
+            onPressed: _showFilterSheet,
+            icon: Icon(Icons.tune_rounded, size: 18, color: hasActiveFilters ? primaryPurple : Colors.white),
+            label: Text(
+              "Filter${hasActiveFilters ? " (Active)" : ""}",
+              style: TextStyle(color: hasActiveFilters ? primaryPurple : Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- 3. FILTER BOTTOM SHEET ---
+  void _showFilterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          decoration: BoxDecoration(
+            color: surfaceDark,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Pull Handle
+              Center(
+                child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))
+                ),
+              ),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Filter", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                  // RESET BUTTON - Stays at the top for easy access
+                  TextButton.icon(
+                    onPressed: () {
+                      setModalState(() {
+                        _filterStatus = 'All';
+                        _filterBookingStatus = 'All';
+                      });
+                      setState(() {}); // Updates the list in real-time
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.redAccent),
+                    label: const Text("Reset All", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+
+              const Divider(height: 20, color: Colors.white10),
+
+              _filterLabel("PAYMENT STATUS"),
+              const SizedBox(height: 8),
+              _buildModalFilterRow(
+                options: ["All", "Success", "Pending", "Refunded"],
+                currentValue: _filterStatus,
+                onSelected: (val) {
+                  setModalState(() => _filterStatus = val);
+                  setState(() {});
+                },
+              ),
+
+              const SizedBox(height: 25),
+
+              _filterLabel("BOOKING STATUS"),
+              const SizedBox(height: 8),
+              _buildModalFilterRow(
+                options: ["All", "Confirmed", "Cancelled", "Attended"],
+                currentValue: _filterBookingStatus,
+                onSelected: (val) {
+                  setModalState(() => _filterBookingStatus = val);
+                  setState(() {});
+                },
+              ),
+
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModalFilterRow({required List<String> options, required String currentValue, required Function(String) onSelected}) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: options.map((option) {
+        bool isSelected = currentValue == option;
+        return ChoiceChip(
+          label: Text(option),
+          selected: isSelected,
+          onSelected: (val) => onSelected(option),
+          selectedColor: primaryPurple.withOpacity(0.2),
+          backgroundColor: bgDark,
+          labelStyle: TextStyle(color: isSelected ? primaryPurple : textMuted, fontSize: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: isSelected ? primaryPurple : Colors.white10)),
+        );
+      }).toList(),
+    );
+  }
+
+  // --- 4. DATA LOGIC ---
   List<Map<String, dynamic>> _processData(List<Map<String, dynamic>> data) {
     var list = data.where((item) {
-      if (_filterStatus == 'All') return true;
-      return item['status'].toString().toLowerCase() == _filterStatus.toLowerCase();
+      bool payMatch = _filterStatus == 'All' || item['status'].toString().toLowerCase() == _filterStatus.toLowerCase();
+      bool bookMatch = _filterBookingStatus == 'All' || (item['booking']['booking_status'] ?? '').toString().toLowerCase() == _filterBookingStatus.toLowerCase();
+      return payMatch && bookMatch;
     }).toList();
 
     if (_sortBy == 'Amount (High)') {
@@ -88,46 +236,49 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     } else if (_sortBy == 'Amount (Low)') {
       list.sort((a, b) => (a['amount'] as num).compareTo(b['amount'] as num));
     } else if (_sortBy == 'Date (Oldest)') {
-      // Sort by ID ascending (smallest ID first = oldest)
       list.sort((a, b) => (a['payment_id'] as num).compareTo(b['payment_id'] as num));
     } else {
-      // Default: Date (Newest) - Largest ID first
       list.sort((a, b) => (b['payment_id'] as num).compareTo(a['payment_id'] as num));
     }
     return list;
   }
 
-  // --- 3. UI COMPONENTS ---
+  // --- UI COMPONENTS (BADGES, CARDS, METADATA) ---
   Widget _loading() => Center(child: CircularProgressIndicator(color: primaryPurple));
   Widget _error(String err) => Center(child: Text("Error: $err", style: const TextStyle(color: Colors.white)));
+  Widget _filterLabel(String text) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(text, style: TextStyle(color: textMuted, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)));
 
-  Widget _buildStatusBadge(String status, {bool isBooking = false}) {
+  Widget _buildStatusBadge(String label, String status, {bool isBooking = false}) {
     Color color = primaryPurple;
     final s = status.toLowerCase();
-    if (s == 'pending') color = Colors.orangeAccent;
+    if (s == 'pending' || s == 'waiting') color = Colors.orangeAccent;
     else if (s == 'refunded' || s == 'cancelled') color = Colors.redAccent;
-    else if (s == 'success') color = Colors.greenAccent;
-    else if (isBooking) color = Colors.cyanAccent;
+    else if (s == 'success' || s == 'confirmed') color = Colors.greenAccent;
+    else if (s == 'processing') color = Colors.cyanAccent;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: isBooking ? 9 : 10, fontWeight: FontWeight.bold)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.2), width: 1)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text("$label: ", style: TextStyle(color: color.withOpacity(0.6), fontSize: 9, fontWeight: FontWeight.w900)),
+          Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 
   Widget _buildTransactionCard(Map<String, dynamic> item) {
     final status = item['status'].toString().toLowerCase();
     final booking = item['booking'];
+    final bStatus = booking['booking_status'] ?? 'Confirmed';
 
     return GestureDetector(
       onTap: () => _showReceiptDetail(item),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(
-          color: surfaceDark, borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
-        ),
+        decoration: BoxDecoration(color: surfaceDark, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withOpacity(0.05))),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -136,12 +287,8 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(children: [
-                    _buildStatusBadge(status),
-                    const SizedBox(width: 8),
-                    _buildStatusBadge(booking['booking_status'] ?? 'Confirmed', isBooking: true),
-                  ]),
-                  Text("#${item['booking_id']}", style: TextStyle(color: textMuted, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Wrap(spacing: 6, children: [_buildStatusBadge("PAY", status), _buildStatusBadge("BKG", bStatus, isBooking: true)]),
+                  Text("#${item['booking_id']}", style: TextStyle(color: textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 16),
@@ -184,7 +331,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  // --- 4. SHEETS & DIALOGS ---
+  // --- 5. SHEETS, DIALOGS, AUTH & REFUND (PRESERVED) ---
   void _showReceiptDetail(Map<String, dynamic> item) {
     final status = item['status'].toString().toLowerCase();
     showModalBottomSheet(
@@ -250,23 +397,30 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     }
   }
 
-  // --- 5. REFUND PROCESS ---
+  Future<bool> _authenticateRefund() async {
+    try {
+      bool canCheck = await auth.canCheckBiometrics;
+      bool isSupported = await auth.isDeviceSupported();
+      if (canCheck || isSupported) {
+        return await auth.authenticate(localizedReason: 'Please authenticate to request this refund', biometricOnly: false, persistAcrossBackgrounding: true);
+      }
+      return true;
+    } catch (e) {
+      debugPrint("Security Error: $e");
+      return false;
+    }
+  }
+
   void _showRefundReasonSheet(Map<String, dynamic> item) {
     String selectedReason = 'Schedule Conflict';
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          decoration: BoxDecoration(
-              color: surfaceDark,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(25))
-          ),
+          decoration: BoxDecoration(color: surfaceDark, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            // --- WRAP STARTS HERE ---
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -277,8 +431,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   const Text("Refund Request", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text("Why are you requesting a refund for #${item['booking_id']}?", style: TextStyle(color: textMuted, fontSize: 14)),
-                  const SizedBox(height: 10), // Reduced spacing slightly to help mobile fit
-
+                  const SizedBox(height: 10),
                   ...['Schedule Conflict', 'Accidental Booking', 'Health Issues', 'Others'].map((reason) =>
                       RadioListTile<String>(
                         title: Text(reason, style: const TextStyle(color: Colors.white, fontSize: 15)),
@@ -286,25 +439,21 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                         groupValue: selectedReason,
                         activeColor: primaryPurple,
                         onChanged: (val) => setModalState(() => selectedReason = val!),
-                        contentPadding: EdgeInsets.zero, // Helps save space
+                        contentPadding: EdgeInsets.zero,
                       ),
                   ).toList(),
-
                   const SizedBox(height: 10),
                   _buildDarkTextField("Comments", "Tell us more...", Icons.chat_bubble_outline),
                   const SizedBox(height: 30),
-
                   SizedBox(
-                    width: double.infinity,
-                    height: 55,
+                    width: double.infinity, height: 55,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent.withOpacity(0.8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
-                      ),
-                      onPressed: () {
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                      onPressed: () async {
                         Navigator.pop(context);
-                        _submitRefund(item['payment_id'], selectedReason);
+                        bool didAuth = await _authenticateRefund();
+                        if (didAuth) { _submitRefund(item['payment_id'], selectedReason); }
+                        else { UIHelpers.showSnack(context, "Authorization failed. Refund canceled.", isError: true); }
                       },
                       child: const Text("Submit Request", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
@@ -312,37 +461,23 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                 ],
               ),
             ),
-            // --- WRAP ENDS HERE ---
           ),
         ),
       ),
     );
   }
 
-// inside _PaymentHistoryPageState
   void _submitRefund(int paymentId, String reason) async {
-    // 1. Show UI feedback
     UIHelpers.showSnack(context, "Submitting to Audit Team...", isError: false);
-
     try {
-      // 2. Pass BOTH the ID and the Reason to the service
       await _service.refundPayment(paymentId, reason);
-
-      // 3. Simulate process delay for "Premium" feel
       await Future.delayed(const Duration(seconds: 2));
-
-      // 4. Success UI
       _confettiController.play();
       _showRefundSuccessDialog();
-
-      // 5. Refresh the list
       setState(() {});
-    } catch (e) {
-      UIHelpers.showSnack(context, "Refund failed: $e", isError: true);
-    }
+    } catch (e) { UIHelpers.showSnack(context, "Refund failed: $e", isError: true); }
   }
 
-  // --- 6. UTILITIES ---
   Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -391,54 +526,11 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   }
 
   void _showWarning(String title, String msg) {
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: surfaceDark, title: Text(title, style: const TextStyle(color: Colors.white)),
-        content: Text(msg, style: TextStyle(color: textMuted)),
-        actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text("OK", style: TextStyle(color: primaryPurple)))],
-      ),
-    );
-  }
-
-  Widget _buildFilterSection() {
-    return Column(
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(children: ["All", "Success", "Pending", "Refunded"].map((s) => _buildFilterChip(s)).toList()),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(children: [
-            Icon(Icons.sort, size: 18, color: textMuted), const SizedBox(width: 8),
-            Text("Sort by:", style: TextStyle(color: textMuted, fontSize: 13)), const SizedBox(width: 10),
-            DropdownButton<String>(
-              value: _sortBy, dropdownColor: surfaceDark, underline: const SizedBox(),
-              style: TextStyle(color: primaryPurple, fontWeight: FontWeight.bold, fontSize: 13),
-              // Inside _buildFilterSection -> DropdownButton
-              items: ['Date (Newest)', 'Date (Oldest)', 'Amount (High)', 'Amount (Low)']
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                  .toList(),
-              onChanged: (value) => setState(() => _sortBy = value!),
-            ),
-          ]),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterChip(String status) {
-    bool isSelected = _filterStatus == status;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8.0),
-      child: ChoiceChip(
-        label: Text(status), selected: isSelected, onSelected: (val) => setState(() => _filterStatus = status),
-        selectedColor: primaryPurple.withOpacity(0.2), backgroundColor: Colors.transparent,
-        labelStyle: TextStyle(color: isSelected ? primaryPurple : textMuted, fontSize: 13),
-        shape: StadiumBorder(side: BorderSide(color: isSelected ? primaryPurple : Colors.white10)),
-      ),
+    showDialog(context: context, builder: (c) => AlertDialog(
+      backgroundColor: surfaceDark, title: Text(title, style: const TextStyle(color: Colors.white)),
+      content: Text(msg, style: TextStyle(color: textMuted)),
+      actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text("OK", style: TextStyle(color: primaryPurple)))],
+    ),
     );
   }
 
