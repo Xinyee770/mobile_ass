@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:confetti/confetti.dart';
 import '../services/payment_service.dart';
+import '../services/wallet_service.dart';
 import '../utils/ui_helpers.dart';
 import 'payment.dart';
 import 'package:local_auth/local_auth.dart';
@@ -15,6 +16,7 @@ class PaymentHistoryPage extends StatefulWidget {
 class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   final PaymentService _service = PaymentService();
   late ConfettiController _confettiController;
+  final WalletService _walletService = WalletService();
   final LocalAuthentication auth = LocalAuthentication();
 
   // --- Filter & Sort States ---
@@ -188,7 +190,8 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               _filterLabel("BOOKING STATUS"),
               const SizedBox(height: 8),
               _buildModalFilterRow(
-                options: ["All", "Confirmed", "Cancelled", "Attended"],
+                // Added "Paid" to this list
+                options: ["All", "Paid", "Confirmed", "Cancelled", "Attended"],
                 currentValue: _filterBookingStatus,
                 onSelected: (val) {
                   setModalState(() => _filterBookingStatus = val);
@@ -226,11 +229,29 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   // --- 4. DATA LOGIC ---
   List<Map<String, dynamic>> _processData(List<Map<String, dynamic>> data) {
     var list = data.where((item) {
-      bool payMatch = _filterStatus == 'All' || item['status'].toString().toLowerCase() == _filterStatus.toLowerCase();
-      bool bookMatch = _filterBookingStatus == 'All' || (item['booking']['booking_status'] ?? '').toString().toLowerCase() == _filterBookingStatus.toLowerCase();
+      // Row 1: Payment Status Filter
+      bool payMatch = _filterStatus == 'All' ||
+          item['status'].toString().toLowerCase() == _filterStatus.toLowerCase();
+
+      // Row 2: Booking Status Filter (Now including "Paid")
+      String bStatus = (item['booking']['booking_status'] ?? '').toString().toLowerCase();
+      String pStatus = (item['status'] ?? '').toString().toLowerCase();
+
+      bool bookMatch = false;
+      if (_filterBookingStatus == 'All') {
+        bookMatch = true;
+      } else if (_filterBookingStatus == 'Paid') {
+        // If "Paid" is selected in the booking row, show anything with successful payment
+        bookMatch = (pStatus == 'success');
+      } else {
+        // Otherwise, match the actual booking status (Confirmed, Cancelled, etc.)
+        bookMatch = bStatus == _filterBookingStatus.toLowerCase();
+      }
+
       return payMatch && bookMatch;
     }).toList();
 
+    // --- Sorting remains the same ---
     if (_sortBy == 'Amount (High)') {
       list.sort((a, b) => (b['amount'] as num).compareTo(a['amount'] as num));
     } else if (_sortBy == 'Amount (Low)') {
@@ -251,14 +272,26 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   Widget _buildStatusBadge(String label, String status, {bool isBooking = false}) {
     Color color = primaryPurple;
     final s = status.toLowerCase();
-    if (s == 'pending' || s == 'waiting') color = Colors.orangeAccent;
-    else if (s == 'refunded' || s == 'cancelled') color = Colors.redAccent;
-    else if (s == 'success' || s == 'confirmed') color = Colors.greenAccent;
-    else if (s == 'processing') color = Colors.cyanAccent;
+
+    if (s == 'pending' || s == 'waiting') {
+      color = Colors.orangeAccent;
+    } else if (s == 'refunded' || s == 'cancelled') {
+      color = Colors.redAccent;
+    } else if (s == 'success' || s == 'confirmed' || s == 'paid') { // Added 'paid' here
+      color = Colors.greenAccent;
+    } else if (s == 'attended') {
+      color = Colors.blueAccent; // Attended usually looks good in Blue
+    } else if (s == 'processing') {
+      color = Colors.cyanAccent;
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withOpacity(0.2), width: 1)),
+      decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withOpacity(0.2), width: 1)
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -274,11 +307,22 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     final booking = item['booking'];
     final bStatus = booking['booking_status'] ?? 'Confirmed';
 
+    // Format the Payment Date (when the money was moved)
+    String paymentDate = "N/A";
+    if (item['created_at'] != null) {
+      DateTime dt = DateTime.parse(item['created_at']);
+      paymentDate = "${dt.day}/${dt.month}/${dt.year}";
+    }
+
     return GestureDetector(
       onTap: () => _showReceiptDetail(item),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
-        decoration: BoxDecoration(color: surfaceDark, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white.withOpacity(0.05))),
+        decoration: BoxDecoration(
+            color: surfaceDark,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.05))
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -287,23 +331,54 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Wrap(spacing: 6, children: [_buildStatusBadge("PAY", status), _buildStatusBadge("BKG", bStatus, isBooking: true)]),
-                  Text("#${item['booking_id']}", style: TextStyle(color: textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                  // Showing both helps the user see "Cancelled" vs "Refunded"
+                  Wrap(
+                      spacing: 6,
+                      children: [
+                        _buildStatusBadge("PAY", status),
+                        _buildStatusBadge("BKG", bStatus)
+                      ]
+                  ),
+                  Text("TXN-${item['payment_id']}",
+                      style: TextStyle(color: textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 16),
-              Text(booking['courses']['course_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 8),
-              _buildCardMetadata(booking),
+              Text(
+                  booking['courses']['course_name'],
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)
+              ),
+              const SizedBox(height: 10),
+
+              // Focused Metadata: Payment Date & Booking ID (No Location)
+              Row(
+                children: [
+                  Icon(Icons.calendar_month_outlined, size: 14, color: textMuted),
+                  const SizedBox(width: 5),
+                  Text("Paid: $paymentDate", style: TextStyle(color: textMuted, fontSize: 13)),
+                  const SizedBox(width: 15),
+                  Icon(Icons.confirmation_number_outlined, size: 14, color: textMuted),
+                  const SizedBox(width: 5),
+                  Text("ID: #${item['booking_id']}", style: TextStyle(color: textMuted, fontSize: 13)),
+                ],
+              ),
+
               const Divider(height: 32, color: Colors.white10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("RM ${item['amount'].toStringAsFixed(2)}", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: primaryPurple)),
+                  Text(
+                      "RM ${item['amount'].toStringAsFixed(2)}",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: primaryPurple)
+                  ),
                   if (status == 'pending')
                     ElevatedButton(
                       onPressed: () => _continueToPayment(item['booking_id']),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orangeAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      ),
                       child: const Text("Pay Now"),
                     )
                   else
@@ -334,28 +409,77 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   // --- 5. SHEETS, DIALOGS, AUTH & REFUND (PRESERVED) ---
   void _showReceiptDetail(Map<String, dynamic> item) {
     final status = item['status'].toString().toLowerCase();
+    final bool isRefunded = status == 'refunded';
+
     showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        decoration: BoxDecoration(color: surfaceDark, borderRadius: const BorderRadius.vertical(top: Radius.circular(25))),
+        decoration: BoxDecoration(
+            color: surfaceDark,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(25))
+        ),
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)))),
             const SizedBox(height: 20),
             const Text("Transaction Details", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
             const Divider(height: 30, color: Colors.white10),
+
+            // --- SECTION 1: FINANCIAL INFO ---
+            _filterLabel("FINANCIAL SUMMARY"),
+            _buildDetailRow("Transaction ID", "TXN-${item['payment_id']}"),
+            _buildDetailRow("Method", item['payment_method'] ?? "Wallet Payment"),
+            _buildDetailRow("Payment Date", item['created_at']?.split('T')[0] ?? "N/A"),
+            _buildDetailRow("Status", status.toUpperCase(),
+                valueColor: isRefunded ? Colors.redAccent : Colors.greenAccent),
+
+            const SizedBox(height: 20),
+
+            // --- SECTION 2: BOOKING INFO (The "Product") ---
+            _filterLabel("PURCHASE DETAILS"),
             _buildDetailRow("Course", item['booking']['courses']['course_name']),
             _buildDetailRow("Booking ID", "#${item['booking_id']}"),
-            _buildDetailRow("Date", item['booking']['booking_date'] ?? "N/A"),
-            _buildDetailRow("Status", status.toUpperCase(), valueColor: status == 'refunded' ? Colors.redAccent : primaryPurple),
-            const Divider(height: 30, color: Colors.white10),
+            _buildDetailRow(
+                "Booking Status",
+                (item['booking']['booking_status'] ?? "Confirmed").toUpperCase(),
+                valueColor: (item['booking']['booking_status'] == 'Cancelled') ? Colors.redAccent : Colors.white
+            ),
+
+            // --- SECTION 3: REFUND OVERVIEW (Conditional) ---
+            if (isRefunded) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.3))
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("REFUND INFORMATION",
+                        style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Text("Reason: ${item['refund_reasons'] ?? 'User Cancellation'}",
+                        style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 25),
+            ],
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Total Paid", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text("RM ${item['amount'].toStringAsFixed(2)}", style: TextStyle(color: primaryPurple, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text("Amount Paid", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text("RM ${item['amount'].toStringAsFixed(2)}",
+                    style: TextStyle(color: primaryPurple, fontSize: 22, fontWeight: FontWeight.w900)),
               ],
             ),
             const SizedBox(height: 30),
@@ -445,6 +569,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   const SizedBox(height: 10),
                   _buildDarkTextField("Comments", "Tell us more...", Icons.chat_bubble_outline),
                   const SizedBox(height: 30),
+                  // Locate this button inside _showRefundReasonSheet
                   SizedBox(
                     width: double.infinity, height: 55,
                     child: ElevatedButton(
@@ -452,8 +577,12 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                       onPressed: () async {
                         Navigator.pop(context);
                         bool didAuth = await _authenticateRefund();
-                        if (didAuth) { _submitRefund(item['payment_id'], selectedReason); }
-                        else { UIHelpers.showSnack(context, "Authorization failed. Refund canceled.", isError: true); }
+                        if (didAuth) {
+                          // FIX IS HERE: Pass 'item' (the Map), NOT 'item['payment_id']' (the int)
+                          _submitRefund(item, selectedReason);
+                        } else {
+                          UIHelpers.showSnack(context, "Authorization failed. Refund canceled.", isError: true);
+                        }
                       },
                       child: const Text("Submit Request", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
@@ -467,15 +596,35 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  void _submitRefund(int paymentId, String reason) async {
-    UIHelpers.showSnack(context, "Submitting to Audit Team...", isError: false);
+// 2. Update the _submitRefund function
+  void _submitRefund(Map<String, dynamic> item, String reason) async {
+    UIHelpers.showSnack(context, "Processing refund to wallet...", isError: false);
+
     try {
+      final int paymentId = item['payment_id'];
+      final double amount = (item['amount'] as num).toDouble();
+
+      // STEP A: Mark the payment record as 'refunded' in the payment table
       await _service.refundPayment(paymentId, reason);
-      await Future.delayed(const Duration(seconds: 2));
-      _confettiController.play();
-      _showRefundSuccessDialog();
-      setState(() {});
-    } catch (e) { UIHelpers.showSnack(context, "Refund failed: $e", isError: true); }
+
+      // STEP B: Actually return the money to the 'wallets' table
+      bool walletSuccess = await _walletService.refundToWallet(
+        paymentId: paymentId,
+        amount: amount,
+        reason: reason,
+      );
+
+      if (walletSuccess) {
+        await Future.delayed(const Duration(seconds: 1));
+        _confettiController.play();
+        _showRefundSuccessDialog();
+        setState(() {}); // Refresh the history list
+      } else {
+        UIHelpers.showSnack(context, "Status updated, but wallet credit failed.", isError: true);
+      }
+    } catch (e) {
+      UIHelpers.showSnack(context, "Refund failed: $e", isError: true);
+    }
   }
 
   Widget _buildDetailRow(String label, String value, {Color? valueColor}) {

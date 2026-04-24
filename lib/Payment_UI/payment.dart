@@ -65,7 +65,13 @@ class _PaymentState extends State<Payment> {
 
       // C. NEW: If Wallet, deduct money first
       if (_selectedMethod == "My Wallet") {
-        bool walletSuccess = await _walletService.payWithWallet(amount, data['courses']['course_name']);
+        // Now passing the _pendingPaymentId so wallet_transactions can link to it
+        bool walletSuccess = await _walletService.payWithWallet(
+            amount,
+            _pendingPaymentId!, // The FK link
+            data['courses']['course_name']
+        );
+
         if (!walletSuccess) {
           UIHelpers.showSnack(context, "Wallet transaction failed.", isError: true);
           return;
@@ -285,7 +291,6 @@ class _PaymentState extends State<Payment> {
       ),
     );
   }
-
   Widget _buildMethodTile(IconData icon, String method) {
     bool isSelected = _selectedMethod == method;
     return GestureDetector(

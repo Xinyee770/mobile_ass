@@ -8,7 +8,13 @@ class PaymentService {
   final _supabase = Supabase.instance.client;
 
   // ---------------------------------------------------------
-  // 1. DATABASE READ OPERATIONS
+  // 1. GLOBAL TEST CONFIGURATION
+  // ---------------------------------------------------------
+  // Hardcode your test user ID here once.
+  final String _userId = "1";
+
+  // ---------------------------------------------------------
+  // 2. DATABASE READ OPERATIONS
   // ---------------------------------------------------------
 
   // Get specific booking details for the Checkout screen
@@ -25,13 +31,14 @@ class PaymentService {
     final response = await _supabase
         .from('payment')
         .select('*, booking(*, courses(course_name))')
+        .eq('user_id', _userId) // Added filter to use the centralized ID
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
   }
 
   // ---------------------------------------------------------
-  // 2. DATABASE CREATE & UPDATE OPERATIONS
+  // 3. DATABASE CREATE & UPDATE OPERATIONS
   // ---------------------------------------------------------
 
   // IMPROVED: Check if a payment record exists before creating a new one
@@ -48,10 +55,10 @@ class PaymentService {
       return existing['payment_id'];
     }
 
-    // 3. If it doesn't exist, create it (Original logic)
+    // 3. If it doesn't exist, create it using the centralized _userId
     final response = await _supabase.from('payment').insert({
       'booking_id': bookingId,
-      'user_id': 1,
+      'user_id': _userId, // Using centralized ID
       'amount': amount,
       'status': 'pending',
       'payment_method': 'Not Selected',
@@ -82,11 +89,11 @@ class PaymentService {
   // UPDATE (Soft Delete): Mark as refunded
   Future<void> refundPayment(int paymentId, String reason) async {
     try {
-      await Supabase.instance.client
+      await _supabase // Simplified reference
           .from('payment')
           .update({
         'status': 'refunded',
-        'refund_reasons': reason, // Link the new column here
+        'refund_reasons': reason,
       })
           .eq('payment_id', paymentId);
     } catch (e) {
@@ -94,44 +101,14 @@ class PaymentService {
     }
   }
 
-  // Add this logic inside refundPayment in PaymentService
-  Future<void> refundToWallet(int paymentId, double amount, String reason) async {
-    try {
-      // 1. Mark payment as refunded
-      await refundPayment(paymentId, reason);
-
-      // 2. Add money back to wallet
-      const String tempUserId = "1";
-      final walletData = await _supabase.from('wallets').select('balance').eq('user_id', tempUserId).single();
-      double currentBalance = (walletData['balance'] as num).toDouble();
-
-      await _supabase.from('wallets').update({
-        'balance': currentBalance + amount,
-      }).eq('user_id', tempUserId);
-
-      // 3. Log the refund in wallet transactions
-      await _supabase.from('wallet_transactions').insert({
-        'user_id': tempUserId,
-        'amount': amount,
-        'transaction_type': 'credit',
-        'category': 'refund',
-        'description': 'Refund for Payment ID: $paymentId',
-      });
-    } catch (e) {
-      throw Exception("Refund failed: $e");
-    }
-  }
-
   // ---------------------------------------------------------
-  // 3. UTILITY: PDF GENERATION & SHARING
+  // 4. UTILITY: PDF GENERATION & SHARING
   // ---------------------------------------------------------
 
   Future<void> shareReceipt(Map<String, dynamic> item) async {
     try {
       final pdf = pw.Document();
 
-      // Data extraction logic:
-      // This handles data coming from either the Checkout screen OR the History screen
       final booking = item['booking'] ?? item;
       final course = booking['courses'] ?? {'course_name': 'N/A'};
       final amount = (item['amount'] ?? course['course_price'] ?? 0.0) as num;
@@ -167,7 +144,6 @@ class PaymentService {
         ),
       );
 
-      // Save to temporary storage and trigger share sheet
       final output = await getTemporaryDirectory();
       final file = File("${output.path}/Receipt_$paymentId.pdf");
       await file.writeAsBytes(await pdf.save());
