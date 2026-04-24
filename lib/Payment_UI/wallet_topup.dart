@@ -10,127 +10,99 @@ class WalletTopUp extends StatefulWidget {
 
 class _WalletTopUpState extends State<WalletTopUp> {
   final WalletService _walletService = WalletService();
+  final TextEditingController _amountController = TextEditingController();
   final List<double> _amounts = [10.0, 50.0, 100.0, 200.0];
-  double _selectedAmount = 50.0;
-  bool _isProcessing = false;
 
-  // Variable to store the balance locally
+  double? _selectedAmount;
+  bool _isProcessing = false;
   double walletBalance = 0.00;
 
   @override
   void initState() {
     super.initState();
-    _loadBalance(); // Load the current balance when screen opens
+    _loadBalance();
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadBalance() async {
     final balance = await _walletService.getBalance();
-    if (mounted) {
-      setState(() => walletBalance = balance);
-    }
+    if (mounted) setState(() => walletBalance = balance);
+  }
+
+  void _onAmountSelected(double amount) {
+    setState(() {
+      _selectedAmount = amount;
+      _amountController.clear();
+      FocusScope.of(context).unfocus(); // Close keyboard when selecting preset
+    });
   }
 
   void _handleTopUp() async {
+    String input = _amountController.text.trim();
+    double finalAmount = 0.0;
+
+    // 1. Precise Validation Checks
+    if (input.isEmpty && _selectedAmount == null) {
+      _showErrorSnackBar("Please enter an amount or pick a quick select option.");
+      return;
+    }
+
+    if (input.isNotEmpty) {
+      finalAmount = double.tryParse(input) ?? -1.0;
+      if (finalAmount == -1.0) {
+        _showErrorSnackBar("Invalid input. Please enter a valid number (e.g. 10.50)");
+        return;
+      }
+    } else {
+      finalAmount = _selectedAmount!;
+    }
+
+    if (finalAmount < 5.0) {
+      _showErrorSnackBar("Minimum top-up is RM 5.00. You entered RM ${finalAmount.toStringAsFixed(2)}");
+      return;
+    }
+
     setState(() => _isProcessing = true);
 
     try {
-      bool success = await _walletService.topUpWallet(_selectedAmount);
-
+      bool success = await _walletService.topUpWallet(finalAmount);
       if (success) {
         if (!mounted) return;
-
-        // --- UPDATED SUCCESS SNACKBAR ---
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              "Successfully added RM ${_selectedAmount.toStringAsFixed(2)}!",
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold
-              ),
-            ),
-            backgroundColor: Colors.green.shade600, // Vibrant green
-            behavior: SnackBarBehavior.floating, // Makes it look modern/detached
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            content: Text("Successfully added RM ${finalAmount.toStringAsFixed(2)}!"),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
           ),
         );
-
         Navigator.pop(context);
-      } else {
-        // Show error if success is false
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Transaction failed. Please try again."),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
       }
     } catch (e) {
-      print("Error in UI _handleTopUp: $e");
+      _showErrorSnackBar("Transaction Error: $e");
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
   }
 
-  // --- UPDATED: Integrated with image_1.png color theme ---
-  Widget _buildBalanceCard(ColorScheme theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        // GRADIENT UPDATE: Dark Purple to Light Purple
-        gradient: LinearGradient(
-          colors: [
-            theme.primary.withOpacity(0.8), // Rich Deep Purple
-            theme.primary.withOpacity(0.4), // Softer Glow Purple
+  // Helper to ensure all errors are RED
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(child: Text(message, style: const TextStyle(fontWeight: FontWeight.bold))),
           ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: theme.primary.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                "Current Balance",
-                style: TextStyle(color: Colors.white70, fontSize: 16),
-              ),
-              const Icon(Icons.wifi_tethering, color: Colors.white24, size: 24),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            "RM ${walletBalance.toStringAsFixed(2)}",
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 34,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 25),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                "ABC WALLET",
-                style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-              Icon(Icons.contactless_outlined, color: Colors.white54, size: 28),
-            ],
-          )
-        ],
+        backgroundColor: Colors.red.shade800, // Strict Red for invalid input
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -138,75 +110,81 @@ class _WalletTopUpState extends State<WalletTopUp> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).colorScheme;
-    // Main background from image_1.png (scaffold)
     const Color scaffoldBg = Color(0xFF101018);
+
+    // FIX: Optimized Button Text logic to ensure it's never blank
+    String getButtonLabel() {
+      if (_isProcessing) return "Processing...";
+      if (_amountController.text.isNotEmpty) {
+        return "Top Up RM ${_amountController.text}";
+      }
+      if (_selectedAmount != null) {
+        return "Top Up RM ${_selectedAmount!.toStringAsFixed(2)}";
+      }
+      return "Confirm Top Up"; // Default fallback so button isn't empty
+    }
 
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: AppBar(
-        title: const Text("Top Up", style: TextStyle(fontWeight: FontWeight.w600)),
+        title: const Text("Top Up", style: TextStyle(color: Colors.white)),
         centerTitle: true,
         backgroundColor: scaffoldBg,
         elevation: 0,
-        // Close button to match the [X] in image_1.png
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // THE INTEGRATED BALANCE CARD
             _buildBalanceCard(theme),
+            const SizedBox(height: 35),
 
-            const SizedBox(height: 40),
-
-            Text(
-                "Add Funds",
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold
-                )
+            const Text("Custom Amount", style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: Colors.white, fontSize: 20),
+              onChanged: (value) => setState(() => _selectedAmount = null),
+              decoration: InputDecoration(
+                prefixText: "RM ",
+                prefixStyle: TextStyle(color: theme.primary, fontWeight: FontWeight.bold, fontSize: 20),
+                hintText: "Enter amount (Min RM 5)",
+                hintStyle: const TextStyle(color: Colors.white24, fontSize: 16),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.white10)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: theme.primary, width: 2)),
+              ),
             ),
-            const SizedBox(height: 20),
+
+            const SizedBox(height: 30),
+            const Text("Quick Select", style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 15),
 
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 2.2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+                crossAxisCount: 2, childAspectRatio: 2.2, crossAxisSpacing: 16, mainAxisSpacing: 16,
               ),
               itemCount: _amounts.length,
               itemBuilder: (context, index) {
                 bool isSelected = _selectedAmount == _amounts[index];
                 return InkWell(
-                  onTap: () => setState(() => _selectedAmount = _amounts[index]),
-                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _onAmountSelected(_amounts[index]),
+                  borderRadius: BorderRadius.circular(15),
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      // Subtle BG, and Purple border ONLY when selected
-                      color: isSelected ? theme.primary.withOpacity(0.08) : Colors.white.withOpacity(0.03),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? theme.primary : Colors.white.withOpacity(0.06),
-                        width: isSelected ? 2 : 1,
-                      ),
+                      color: isSelected ? theme.primary.withOpacity(0.15) : Colors.white.withOpacity(0.03),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: isSelected ? theme.primary : Colors.white10, width: isSelected ? 2 : 1),
                     ),
-                    child: Text(
-                      "RM ${_amounts[index].toStringAsFixed(0)}",
-                      style: TextStyle(
-                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18
-                      ),
+                    child: Text("RM ${_amounts[index].toStringAsFixed(0)}",
+                      style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: FontWeight.bold, fontSize: 18),
                     ),
                   ),
                 );
@@ -215,28 +193,58 @@ class _WalletTopUpState extends State<WalletTopUp> {
 
             const SizedBox(height: 50),
 
-            // THE SAVE/CONFIRM ACCENT BUTTON (Matches "Save receipt")
             SizedBox(
               width: double.infinity,
-              height: 55,
+              height: 60,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.primary, // This is your powerful Purple
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor: theme.primary,
+                  disabledBackgroundColor: theme.primary.withOpacity(0.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 8,
+                  shadowColor: theme.primary.withOpacity(0.4),
                 ),
                 onPressed: _isProcessing ? null : _handleTopUp,
                 child: _isProcessing
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Text(
-                  "Top Up RM ${_selectedAmount.toStringAsFixed(2)}",
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Text(getButtonLabel(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBalanceCard(ColorScheme theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [theme.primary, theme.primary.withOpacity(0.6)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: theme.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("TOTAL BALANCE", style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+          const SizedBox(height: 8),
+          Text("RM ${walletBalance.toStringAsFixed(2)}",
+            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("ACTIVE WALLET", style: TextStyle(color: Colors.white38, fontSize: 11)),
+              Icon(Icons.nfc, color: Colors.white24),
+            ],
+          ),
+        ],
       ),
     );
   }

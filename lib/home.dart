@@ -30,6 +30,11 @@ class Home extends StatelessWidget {
           brightness: Brightness.dark,
           surface: cardGrey,
         ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: Colors.grey[900], // Default background
+          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+          behavior: SnackBarBehavior.floating,
+        ),
         scaffoldBackgroundColor: bgDeep,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,

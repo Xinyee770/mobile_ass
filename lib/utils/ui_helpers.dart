@@ -51,7 +51,7 @@ class UIHelpers {
           Text(value, style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: isTotal ? 20 : 14,
-              color: isTotal ? Colors.blueAccent : Colors.black
+              color: isTotal ? Colors.blueAccent : Colors.white
           )),
         ],
       ),
