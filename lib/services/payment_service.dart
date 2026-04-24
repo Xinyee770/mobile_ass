@@ -94,6 +94,34 @@ class PaymentService {
     }
   }
 
+  // Add this logic inside refundPayment in PaymentService
+  Future<void> refundToWallet(int paymentId, double amount, String reason) async {
+    try {
+      // 1. Mark payment as refunded
+      await refundPayment(paymentId, reason);
+
+      // 2. Add money back to wallet
+      const String tempUserId = "1";
+      final walletData = await _supabase.from('wallets').select('balance').eq('user_id', tempUserId).single();
+      double currentBalance = (walletData['balance'] as num).toDouble();
+
+      await _supabase.from('wallets').update({
+        'balance': currentBalance + amount,
+      }).eq('user_id', tempUserId);
+
+      // 3. Log the refund in wallet transactions
+      await _supabase.from('wallet_transactions').insert({
+        'user_id': tempUserId,
+        'amount': amount,
+        'transaction_type': 'credit',
+        'category': 'refund',
+        'description': 'Refund for Payment ID: $paymentId',
+      });
+    } catch (e) {
+      throw Exception("Refund failed: $e");
+    }
+  }
+
   // ---------------------------------------------------------
   // 3. UTILITY: PDF GENERATION & SHARING
   // ---------------------------------------------------------

@@ -20,77 +20,96 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
     _transactionsFuture = _walletService.getTransactionHistory();
   }
 
-  // --- NEW: PIE CHART SECTION ---
   Widget _buildSummaryHeader(List<Map<String, dynamic>> data, ColorScheme theme) {
-    double totalIn = 0;
+    double totalCredits = 0;
+    double totalDebits = 0;
+    int creditCount = 0;
+    int debitCount = 0;
+
     for (var item in data) {
-      totalIn += (item['amount'] ?? 0).toDouble();
+      double amt = (item['amount'] ?? 0).toDouble().abs();
+      if (item['transaction_type'] == 'credit') {
+        totalCredits += amt;
+        creditCount++;
+      } else {
+        totalDebits += amt;
+        debitCount++;
+      }
     }
 
     return Container(
       margin: const EdgeInsets.all(20),
-      padding: const EdgeInsets.all(20),
-      height: 180, // Fixed height for the chart area
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24), // Increased padding
+      height: 220,
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E2C),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.primary.withOpacity(0.1)),
+        borderRadius: BorderRadius.circular(28), // Softer corners
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
-          // 1. THE PIE CHART
           Expanded(
             flex: 1,
             child: PieChart(
               PieChartData(
                 sectionsSpace: 4,
-                centerSpaceRadius: 30,
+                centerSpaceRadius: 35,
                 sections: [
-                  PieChartSectionData(
-                    color: theme.primary,
-                    value: totalIn,
-                    title: '', // Hide text inside pie
-                    radius: 12,
-                  ),
-                  PieChartSectionData(
-                    color: Colors.white10,
-                    value: 100, // Background gray to show "potential"
-                    title: '',
-                    radius: 10,
-                  ),
+                  PieChartSectionData(color: Colors.greenAccent, value: totalCredits == 0 ? 1 : totalCredits, title: '', radius: 18),
+                  PieChartSectionData(color: Colors.redAccent, value: totalDebits == 0 ? 0.1 : totalDebits, title: '', radius: 14),
                 ],
               ),
             ),
           ),
-
-          const SizedBox(width: 20),
-
-          // 2. THE TOTALS DATA
+          const SizedBox(width: 25), // Increased gap
           Expanded(
             flex: 1,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Total Savings",
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13)),
-                const SizedBox(height: 4),
-                Text("RM ${totalIn.toStringAsFixed(2)}",
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
+                _buildStatDetail("TOTAL CREDITS", "RM ${totalCredits.toStringAsFixed(2)}", Colors.greenAccent, Icons.add_chart),
+                const SizedBox(height: 16),
+                _buildStatDetail("TOTAL DEBITS", "RM ${totalDebits.toStringAsFixed(2)}", Colors.redAccent, Icons.analytics_outlined),
+                const Divider(color: Colors.white10, height: 24),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.trending_up, color: theme.primary, size: 16),
-                    const SizedBox(width: 5),
-                    Text("${data.length} Top-ups",
-                        style: TextStyle(color: theme.primary, fontWeight: FontWeight.w600)),
+                    _miniCounter("$creditCount Credits", Colors.greenAccent),
+                    _miniCounter("$debitCount Debits", Colors.redAccent),
                   ],
-                ),
+                )
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+// Helper for the stat rows
+  Widget _buildStatDetail(String label, String value, Color color, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        Row(
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 4),
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+  }
+
+// Helper for the count bubbles
+  Widget _miniCounter(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -148,38 +167,59 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
   }
 
   Widget _buildTransactionItem(Map<String, dynamic> tx, ColorScheme theme, Color cardColor) {
-    // Parse the date
     DateTime date = DateTime.parse(tx['created_at']);
     String formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(date);
 
+    final bool isDebit = tx['transaction_type'] == 'debit';
+    final double amount = (tx['amount'] as num).toDouble().abs();
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18), // Larger inner padding
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: theme.primary.withOpacity(0.1),
-            child: Icon(Icons.add_rounded, color: theme.primary),
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text("Wallet Top-up",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                Text(formattedDate,
-                    style: const TextStyle(color: Colors.white38, fontSize: 12)),
-              ],
+            radius: 22, // Slightly larger avatar
+            backgroundColor: isDebit ? Colors.redAccent.withOpacity(0.1) : Colors.greenAccent.withOpacity(0.1),
+            child: Icon(
+              isDebit ? Icons.arrow_outward_rounded : Icons.call_received_rounded,
+              color: isDebit ? Colors.redAccent : Colors.greenAccent,
+              size: 20,
             ),
           ),
+          const SizedBox(width: 16),
+          // Flexible wrapper prevents the title from squishing the amount
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8.0), // Padding between text and amount
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      isDebit ? (tx['description'] ?? "Course Payment") : "Wallet Deposit",
+                      maxLines: 2, // Allow wrapping for long names
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)
+                  ),
+                  const SizedBox(height: 4),
+                  Text(formattedDate, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+          // Amount stays pinned to the right
           Text(
-            "+ RM ${tx['amount'].toStringAsFixed(2)}",
-            style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16),
+            "${isDebit ? "-" : "+"} RM ${amount.toStringAsFixed(2)}",
+            style: TextStyle(
+              color: isDebit ? Colors.redAccent : Colors.greenAccent,
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+              letterSpacing: -0.5,
+            ),
           ),
         ],
       ),

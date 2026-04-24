@@ -3,6 +3,7 @@ import 'package:confetti/confetti.dart';
 import '../services/payment_service.dart';
 import '../utils/ui_helpers.dart';
 import 'package:local_auth/local_auth.dart';
+import '../services/wallet_service.dart';
 
 class Payment extends StatefulWidget {
   final int bookingId;
@@ -16,6 +17,8 @@ class _PaymentState extends State<Payment> {
   final PaymentService _service = PaymentService();
   final LocalAuthentication auth = LocalAuthentication();
   late ConfettiController _confettiController;
+  final WalletService _walletService = WalletService(); // Initialize service
+  double _userBalance = 0.0;
 
   int? _pendingPaymentId;
   String _selectedMethod = 'Credit Card';
@@ -42,9 +45,15 @@ class _PaymentState extends State<Payment> {
 
   Future<void> _handlePayment(BuildContext context, double amount, Map<String, dynamic> data) async {
     try {
+      // A. Check balance if Wallet is selected
+      if (_selectedMethod == "My Wallet" && _userBalance < amount) {
+        UIHelpers.showSnack(context, "Insufficient Wallet Balance!", isError: true);
+        return;
+      }
+
+      // B. Your Authorization (KEEP THIS EXACTLY AS IS)
       bool canCheck = await auth.canCheckBiometrics;
       bool isSupported = await auth.isDeviceSupported();
-
       if (canCheck || isSupported) {
         bool didAuthenticate = await auth.authenticate(
           localizedReason: 'Please authenticate to complete your payment',
@@ -54,6 +63,16 @@ class _PaymentState extends State<Payment> {
         if (!didAuthenticate) return;
       }
 
+      // C. NEW: If Wallet, deduct money first
+      if (_selectedMethod == "My Wallet") {
+        bool walletSuccess = await _walletService.payWithWallet(amount, data['courses']['course_name']);
+        if (!walletSuccess) {
+          UIHelpers.showSnack(context, "Wallet transaction failed.", isError: true);
+          return;
+        }
+      }
+
+      // D. Finalize record (same as before)
       await _service.completePayment(
         paymentId: _pendingPaymentId!,
         bookingId: widget.bookingId,
@@ -153,15 +172,16 @@ class _PaymentState extends State<Payment> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _service.getBookingDetails(widget.bookingId),
+      body: FutureBuilder<List<dynamic>>(
+        future: Future.wait([
+        _service.getBookingDetails(widget.bookingId),
+        _walletService.getBalance(),
+        ]),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: primaryPurple));
-          }
-          if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}", style: const TextStyle(color: Colors.white)));
+          if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
 
-          final data = snapshot.data!;
+          final data = snapshot.data![0];
+          _userBalance = snapshot.data![1]; // Update balance
           final price = (data['courses']['course_price'] as num).toDouble();
 
           if (_pendingPaymentId == null) {
@@ -202,6 +222,7 @@ class _PaymentState extends State<Payment> {
                 const SizedBox(height: 25),
                 const Text("Payment Method", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
                 const SizedBox(height: 15),
+                _buildWalletTile(price),
                 _buildMethodTile(Icons.credit_card, "Credit Card"),
                 _buildMethodTile(Icons.account_balance_wallet, "GrabPay"),
                 _buildMethodTile(Icons.qr_code_scanner, "TNG eWallet"),
@@ -227,6 +248,43 @@ class _PaymentState extends State<Payment> {
   }
 
   // --- DARK MODE HELPERS ---
+
+  Widget _buildWalletTile(double price) {
+    bool isSelected = _selectedMethod == "My Wallet";
+    bool canAfford = _userBalance >= price;
+
+    return GestureDetector(
+      onTap: canAfford ? () => setState(() => _selectedMethod = "My Wallet") : null,
+      child: Opacity(
+        opacity: canAfford ? 1.0 : 0.5,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isSelected ? primaryPurple.withOpacity(0.1) : surfaceDark,
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: isSelected ? primaryPurple : Colors.white10),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.account_balance_wallet, color: isSelected ? primaryPurple : textMuted),
+              const SizedBox(width: 15),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("My Wallet", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text("Balance: RM ${_userBalance.toStringAsFixed(2)}",
+                      style: TextStyle(color: canAfford ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
+                ],
+              ),
+              const Spacer(),
+              if (isSelected) Icon(Icons.check_circle, color: primaryPurple),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildMethodTile(IconData icon, String method) {
     bool isSelected = _selectedMethod == method;
