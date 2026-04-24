@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'Profile_UI/profile.dart';
 import 'Booking_UI/booking.dart';
+import 'Booking_UI/booking_record.dart';
 import 'Payment_UI/payment_read.dart';
 import 'Payment_UI/wallet_topup.dart';
 import 'Payment_UI/wallet_history.dart';
@@ -95,6 +96,7 @@ class _MyHomePageState extends State<MyHomePage> {
             _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()), // Using the new unique class name),
             _buildDrawerItem(Icons.calendar_month_outlined, 'Calendar', const BookingPage()),
             _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
+            _buildDrawerItem(Icons.event_note_outlined, 'Booking History', const BookingRecord()),
 
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),

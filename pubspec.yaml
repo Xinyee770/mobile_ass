@@ -44,6 +44,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.12.4
   local_auth_android: ^2.0.8
+  #supabase_flutter: ^2.0.0
 
 dev_dependencies:
   flutter_test:

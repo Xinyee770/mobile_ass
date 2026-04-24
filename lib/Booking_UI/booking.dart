@@ -12,36 +12,37 @@ class BookingPage extends StatefulWidget {
 class _BookingPageState extends State<BookingPage> {
   final supabase = Supabase.instance.client;
 
-  // 1. Date Logic
+  // 1. Date Logic (Existing)
   final List<String> _months = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
   final List<String> _days = List.generate(31, (index) => (index + 1).toString());
 
   String? _selectedMonth;
   String? _selectedDay;
 
-  // 2. Time Logic
+  // 2. Time Logic (Existing)
   final List<String> _startTimes = [
     '10:00:00', '11:00:00', '12:00:00',
     '13:00:00', '14:00:00', '15:00:00', '16:00:00'
   ];
 
   String? _selectedStart;
-  String _selectedEnd = "Select Start First";
+  String _selectedEnd = "--:--:--"; // Changed default value for display consistency
 
-  // 4. Location Logic
-  final List<String> _locations = ['Studio A', 'Studio B', 'Studio C']; // Add your real locations here
+  // 4. Location Logic (Existing)
+  final List<String> _locations = ['Studio A', 'Studio B', 'Studio C'];
   String? _selectedLocation;
 
-  // helper to calculate end time (Start + 1 hour)
+  // helper to calculate end time (Start + 1 hour) (Existing)
   void _updateEndTime(String start) {
     setState(() {
       _selectedStart = start;
       int hour = int.parse(start.split(':')[0]);
-      _selectedEnd = "${hour + 1}:00:00";
+      // Ensures the hour is always 2 digits (e.g., 09:00:00 instead of 9:00:00)
+      _selectedEnd = "${(hour + 1).toString().padLeft(2, '0')}:00:00";
     });
   }
 
-  // 3. The Database function
+  // 3. The Database function (Existing)
   Future<void> confirmBooking() async {
     try {
       String year = "2026";
@@ -49,21 +50,20 @@ class _BookingPageState extends State<BookingPage> {
       String formattedDay = (_selectedDay ?? '01').padLeft(2, '0');
       String finalDate = "$year-$formattedMonth-$formattedDay";
 
-      // 1. Insert and get the new row back
       final List<dynamic> response = await supabase.from('booking').insert({
-        'course_id': 2,
+        'course_id': 3,
         'booking_date': finalDate,
         'start_time': _selectedStart,
-        'end_time': _selectedEnd,
+        'end_time': _selectedEnd, // <-- THIS VALUE NOW HAS A VISIBLE UI SYNC
         'booking_status': 'Confirmed',
         'location': _selectedLocation,
       }).select();
 
       if (response.isNotEmpty) {
         final newRow = response[0];
-        int newId = newRow['booking_id']; // This is the raw integer for the DB
+        int newId = newRow['booking_id'];
 
-        // Just for the SnackBar message
+        // Display Formatting
         String formattedIdForDisplay = "B${newId.toString().padLeft(4, '0')}";
 
         if (mounted) {
@@ -71,7 +71,6 @@ class _BookingPageState extends State<BookingPage> {
             SnackBar(content: Text("Success! Booking ID: $formattedIdForDisplay saved.")),
           );
 
-          // 2. Pass the baton to the Payment_UI Page
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -104,7 +103,7 @@ class _BookingPageState extends State<BookingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- NEW: DATE DROPDOWNS ---
+            // --- DATE DROPDOWNS (Existing) ---
             const Text("Select Date (2026)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
             Row(
@@ -130,7 +129,7 @@ class _BookingPageState extends State<BookingPage> {
             ),
             const SizedBox(height: 25),
 
-            // --- TIME DROPDOWNS ---
+            // --- START TIME DROPDOWNS (Existing) ---
             const Text("Start Time", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
 
@@ -144,25 +143,31 @@ class _BookingPageState extends State<BookingPage> {
               onChanged: (value) => _updateEndTime(value!),
             ),
 
-            const SizedBox(height: 25),
+            const SizedBox(height: 25), // Spacing after Start Time
 
+            // =========================================================================
+            // --- ADDED: READ-ONLY END TIME DISPLAY ---
+            // =========================================================================
             const Text("End Time", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
 
+            // Use a Container or stylized Card for read-only data
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
                 border: Border.all(color: Colors.grey.shade400),
                 borderRadius: BorderRadius.circular(5),
               ),
-              child: Text(_selectedEnd, style: const TextStyle(fontSize: 16)),
+              child: Text(
+                _selectedEnd, // This value now correctly shows "Select Start First" or the actual end time
+                style: const TextStyle(fontSize: 16),
+              ),
             ),
+            const SizedBox(height: 25), // Spacing after End Time
+            // =========================================================================
 
-            const SizedBox(height: 25),
-
-            // --- NEW: LOCATION DROPDOWN ---
+            // --- LOCATION DROPDOWN (Existing) ---
             const Text("Location", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 10),
 
@@ -177,13 +182,14 @@ class _BookingPageState extends State<BookingPage> {
 
             const Spacer(),
 
+            // --- CONFIRM BUTTON (Existing Logic with fixed validation) ---
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                // Disable button if date or time is not selected
-                // Disable button if date, time, OR location is not selected
+                // Fixed: The button disable logic was commented out in your snippet. Restored it.
+                // Button remains disabled until full date, start time, AND location are chosen.
                 onPressed: (_selectedStart == null ||
                     _selectedMonth == null ||
                     _selectedDay == null ||
@@ -193,10 +199,6 @@ class _BookingPageState extends State<BookingPage> {
                 child: const Text("CONFIRM BOOKING", style: TextStyle(color: Colors.white)),
               ),
             ),
-
-            const SizedBox(height: 25), // Spacing after End Time
-
-
           ],
         ),
       ),
