@@ -173,9 +173,22 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
     final bool isDebit = tx['transaction_type'] == 'debit';
     final double amount = (tx['amount'] as num).toDouble().abs();
 
+    // NEW LOGIC: Determine the display title based on category
+    String displayTitle = "";
+    if (isDebit) {
+      displayTitle = tx['description'] ?? "Course Payment";
+    } else {
+      // If it's a Credit, check if it's a refund or a normal top-up
+      if (tx['category'] == 'refund') {
+        displayTitle = "Refunded";
+      } else {
+        displayTitle = "Wallet Deposit";
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(18), // Larger inner padding
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(18),
@@ -183,35 +196,39 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
       child: Row(
         children: [
           CircleAvatar(
-            radius: 22, // Slightly larger avatar
+            radius: 22,
             backgroundColor: isDebit ? Colors.redAccent.withOpacity(0.1) : Colors.greenAccent.withOpacity(0.1),
             child: Icon(
-              isDebit ? Icons.arrow_outward_rounded : Icons.call_received_rounded,
+              // Change icon for refunds to make it distinct
+              tx['category'] == 'refund' ? Icons.assignment_return_rounded :
+              (isDebit ? Icons.arrow_outward_rounded : Icons.call_received_rounded),
               color: isDebit ? Colors.redAccent : Colors.greenAccent,
               size: 20,
             ),
           ),
           const SizedBox(width: 16),
-          // Flexible wrapper prevents the title from squishing the amount
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(right: 8.0), // Padding between text and amount
+              padding: const EdgeInsets.only(right: 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                      isDebit ? (tx['description'] ?? "Course Payment") : "Wallet Deposit",
-                      maxLines: 2, // Allow wrapping for long names
+                      displayTitle, // Use the new dynamic title here
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)
                   ),
                   const SizedBox(height: 4),
-                  Text(formattedDate, style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                  // Show the description as a sub-text if it's a refund
+                  if (tx['category'] == 'refund' && tx['description'] != null)
+                    Text(tx['description'], style: const TextStyle(color: Colors.white38, fontSize: 10))
+                  else
+                    Text(formattedDate, style: const TextStyle(color: Colors.white38, fontSize: 11)),
                 ],
               ),
             ),
           ),
-          // Amount stays pinned to the right
           Text(
             "${isDebit ? "-" : "+"} RM ${amount.toStringAsFixed(2)}",
             style: TextStyle(

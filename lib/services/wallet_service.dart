@@ -3,73 +3,115 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class WalletService {
   final _supabase = Supabase.instance.client;
 
-  // 1. Get current balance
+  // ---------------------------------------------------------
+  // 1. GLOBAL TEST CONFIGURATION
+  // ---------------------------------------------------------
+  // Change this once to update the whole service
+  final String _userId = "1";
+
+  // ---------------------------------------------------------
+  // 2. BALANCE OPERATIONS
+  // ---------------------------------------------------------
+
+  // Get current balance from your ACTUAL 'wallets' table
   Future<double> getBalance() async {
     try {
-      // Ensure this matches your testing ID!
-      const String tempUserId = "1";
-
       final data = await _supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_id', tempUserId)
+          .from('wallets') // Table Name: wallets
+          .select('balance') // Column Name: balance
+          .eq('user_id', _userId)
           .maybeSingle();
 
-      print("Fetched Balance for User 1: ${data?['balance']}"); // Debug log
-      return (data?['balance'] as num?)?.toDouble() ?? 0.0;
+      if (data == null) {
+        print("Warning: No wallet record found for User ID $_userId");
+        return 0.0;
+      }
+
+      return (data['balance'] as num?)?.toDouble() ?? 0.0;
     } catch (e) {
-      print("Error fetching wallet: $e");
+      print("Error fetching wallet balance: $e");
       return 0.0;
     }
   }
 
-  // 2. Updated Top Up (Using Upsert)
-  Future<bool> topUpWallet(double amount) async {
+  // ---------------------------------------------------------
+  // 3. TRANSACTION OPERATIONS
+  // ---------------------------------------------------------
+
+  // TOP UP: Add money to 'wallets' table
+  Future<bool> topUpWallet(double amount, String refId, int paymentMethodId) async {
     try {
-      // TEMPORARY: Hardcoding user_id to 1 for testing
-      // Change this back to _supabase.auth.currentUser?.id later!
-      const String tempUserId = "1";
+      double currentBalance = await getBalance();
 
-      print("DEBUG: Testing Top Up for User: $tempUserId");
+      // Update the balance in the 'wallets' table
+      await _supabase.from('wallets').update({
+        'balance': currentBalance + amount
+      }).eq('user_id', _userId);
 
-      // 1. Get current balance
-      final walletResponse = await _supabase
-          .from('wallets')
-          .select('balance')
-          .eq('user_id', tempUserId)
-          .maybeSingle();
-
-      double currentBalance = (walletResponse?['balance'] as num?)?.toDouble() ?? 0.0;
-      double newBalance = currentBalance + amount;
-
-      // 2. UPSERT the balance
-      await _supabase.from('wallets').upsert({
-        'user_id': tempUserId,
-        'balance': newBalance,
-      }, onConflict: 'user_id');
-
-      // 3. Log the transaction
+      // Log the credit in 'wallet_transactions'
       await _supabase.from('wallet_transactions').insert({
-        'user_id': tempUserId,
+        'user_id': _userId,
         'amount': amount,
         'transaction_type': 'credit',
         'category': 'topup',
-        'description': 'Manual Testing Top Up',
+        'reference_id': refId,
+        'payment_method_id': paymentMethodId,
+        'payment_id': null,
+        'description': 'Wallet Top-up',
       });
 
       return true;
     } catch (e) {
-      print("Top up error: $e");
+      print("DEBUG: Wallet Top-Up Failed! Error: $e");
       return false;
     }
   }
+
+  // PAY WITH WALLET: Deduct money from 'wallets' table
+  Future<bool> payWithWallet(double amount, int paymentId, String courseName) async {
+    try {
+      final String refId = "PAY-BK-${DateTime.now().millisecondsSinceEpoch}";
+      double currentBalance = await getBalance();
+
+      if (currentBalance < amount) {
+        print("Payment Error: Insufficient funds");
+        return false;
+      }
+
+      // Deduct from 'wallets' table
+      await _supabase.from('wallets').update({
+        'balance': currentBalance - amount,
+      }).eq('user_id', _userId);
+
+      // Log the debit in 'wallet_transactions'
+      await _supabase.from('wallet_transactions').insert({
+        'user_id': _userId,
+        'amount': -amount,
+        'transaction_type': 'debit',
+        'category': 'booking',
+        'reference_id': refId,
+        'payment_id': paymentId,
+        'payment_method_id': null,
+        'description': 'Paid for $courseName',
+      });
+
+      return true;
+    } catch (e) {
+      print("Wallet Payment Error: $e");
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------
+  // 4. HISTORY & SAVED METHODS
+  // ---------------------------------------------------------
 
   Future<List<Map<String, dynamic>>> getTransactionHistory() async {
     try {
       final response = await _supabase
           .from('wallet_transactions')
           .select()
-          .eq('user_id', '1') // Using your test user_id
+          .eq('user_id', _userId)
           .order('created_at', ascending: false);
 
       return List<Map<String, dynamic>>.from(response);
@@ -79,35 +121,100 @@ class WalletService {
     }
   }
 
-  // Inside WalletService class
-  Future<bool> payWithWallet(double amount, String courseName) async {
+  Future<List<Map<String, dynamic>>> getSavedPaymentMethods() async {
     try {
-      const String tempUserId = "1";
+      final data = await _supabase
+          .from('saved_payment_methods')
+          .select()
+          .eq('user_id', _userId);
+      return List<Map<String, dynamic>>.from(data);
+    } catch (e) {
+      print("Error fetching saved methods: $e");
+      return [];
+    }
+  }
 
-      // 1. Get current balance
+  Future<bool> addSavedMethod({
+    required String type,
+    required String nickname,
+    required String identifier,
+    String? expiry,
+  }) async {
+    try {
+      await _supabase.from('saved_payment_methods').insert({
+        'user_id': _userId,
+        'method_type': type,
+        'nickname': nickname,
+        'identifier': identifier,
+        'expiry_date': expiry,
+      });
+      return true;
+    } catch (e) {
+      print("Error saving method: $e");
+      return false;
+    }
+  }
+
+  Future<bool> deletePaymentMethod(int id) async {
+    try {
+      await _supabase.from('saved_payment_methods').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      print("Delete Method Error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> updatePaymentMethod({
+    required int id,
+    required String nickname,
+    required String expiry,
+  }) async {
+    try {
+      await _supabase
+          .from('saved_payment_methods')
+          .update({
+        'nickname': nickname,
+        'expiry_date': expiry,
+      })
+          .eq('id', id);
+      return true;
+    } catch (e) {
+      print("Update Method Error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> refundToWallet({
+    required int paymentId,
+    required double amount,
+    required String reason
+  }) async {
+    try {
+      // A. Generate a reference for the refund
+      final String refId = "REF-${DateTime.now().millisecondsSinceEpoch}";
+
+      // B. Get current balance and add the refund amount
       double currentBalance = await getBalance();
 
-      // 2. Check if they can afford it
-      if (currentBalance < amount) return false;
-
-      // 3. Update balance (Subtract)
-      double newBalance = currentBalance - amount;
       await _supabase.from('wallets').update({
-        'balance': newBalance,
-      }).eq('user_id', tempUserId);
+        'balance': currentBalance + amount
+      }).eq('user_id', _userId);
 
-      // 4. Log the transaction in Wallet History
+      // C. Log the refund in wallet_transactions
       await _supabase.from('wallet_transactions').insert({
-        'user_id': tempUserId,
-        'amount': -amount, // Negative indicates spending
-        'transaction_type': 'debit',
-        'category': 'payment',
-        'description': 'Paid for course: $courseName',
+        'user_id': _userId,
+        'amount': amount, // Positive because money is coming in
+        'transaction_type': 'credit',
+        'category': 'refund',
+        'reference_id': refId,
+        'payment_id': paymentId, // Link to the original payment ID
+        'description': 'Refund for #$paymentId: $reason',
       });
 
       return true;
     } catch (e) {
-      print("Wallet payment error: $e");
+      print("Wallet Refund Logic Error: $e");
       return false;
     }
   }
