@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-class Admin extends StatefulWidget {
+class Admin extends StatelesslWidget {
   const Admin({super.key});
 
   @override
