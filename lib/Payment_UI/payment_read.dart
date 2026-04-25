@@ -556,7 +556,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   const SizedBox(height: 8),
                   Text("Why are you requesting a refund for #${item['booking_id']}?", style: TextStyle(color: textMuted, fontSize: 14)),
                   const SizedBox(height: 10),
-                  ...['Schedule Conflict', 'Accidental Booking', 'Health Issues', 'Others'].map((reason) =>
+                  ...['Schedule Conflict', 'Accidental Booking', 'Health Issues', 'Personal Reasons'].map((reason) =>
                       RadioListTile<String>(
                         title: Text(reason, style: const TextStyle(color: Colors.white, fontSize: 15)),
                         value: reason,
@@ -566,8 +566,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                         contentPadding: EdgeInsets.zero,
                       ),
                   ).toList(),
-                  const SizedBox(height: 10),
-                  _buildDarkTextField("Comments", "Tell us more...", Icons.chat_bubble_outline),
                   const SizedBox(height: 30),
                   // Locate this button inside _showRefundReasonSheet
                   SizedBox(
