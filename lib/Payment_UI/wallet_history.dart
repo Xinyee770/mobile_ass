@@ -13,6 +13,8 @@ class WalletTransactionHistory extends StatefulWidget {
 class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
   final WalletService _walletService = WalletService();
   late Future<List<Map<String, dynamic>>> _transactionsFuture;
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
 
   @override
   void initState() {
@@ -20,11 +22,18 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
     _transactionsFuture = _walletService.getTransactionHistory();
   }
 
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
   Widget _buildSummaryHeader(List<Map<String, dynamic>> data, ColorScheme theme) {
     double totalCredits = 0;
     double totalDebits = 0;
     int creditCount = 0;
     int debitCount = 0;
+    Map<String, double> categoryMap = {};
 
     for (var item in data) {
       double amt = (item['amount'] ?? 0).toDouble().abs();
@@ -34,34 +43,87 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
       } else {
         totalDebits += amt;
         debitCount++;
+        String cat = item['description'] ?? "Other";
+        categoryMap[cat] = (categoryMap[cat] ?? 0) + amt;
       }
     }
 
+    return Column(
+      children: [
+        SizedBox(
+          height: 240, // Fixed height for both
+          child: PageView(
+            controller: _pageController,
+            onPageChanged: (index) => setState(() => _currentPage = index),
+            children: [
+              // Added Padding here to create space between the edge and the card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: _buildOriginalCashFlow(totalCredits, totalDebits, creditCount, debitCount, theme),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: _buildCategorySpending(categoryMap, totalDebits, theme),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildDot(0),
+            const SizedBox(width: 8),
+            _buildDot(1),
+          ],
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+// Your exact original UI wrapped in a method
+  Widget _buildOriginalCashFlow(double totalCredits, double totalDebits, int creditCount, int debitCount, ColorScheme theme) {
+    double totalFlow = totalCredits + totalDebits;
+
     return Container(
-      margin: const EdgeInsets.all(20),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24), // Increased padding
-      height: 220,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E2C),
-        borderRadius: BorderRadius.circular(28), // Softer corners
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
           Expanded(
             flex: 1,
-            child: PieChart(
-              PieChartData(
-                sectionsSpace: 4,
-                centerSpaceRadius: 35,
-                sections: [
-                  PieChartSectionData(color: Colors.greenAccent, value: totalCredits == 0 ? 1 : totalCredits, title: '', radius: 18),
-                  PieChartSectionData(color: Colors.redAccent, value: totalDebits == 0 ? 0.1 : totalDebits, title: '', radius: 14),
-                ],
-              ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 4,
+                    centerSpaceRadius: 38, // Slightly larger for text
+                    sections: [
+                      PieChartSectionData(color: Colors.greenAccent, value: totalCredits == 0 ? 1 : totalCredits, title: '', radius: 18),
+                      PieChartSectionData(color: Colors.redAccent, value: totalDebits == 0 ? 0.1 : totalDebits, title: '', radius: 14),
+                    ],
+                  ),
+                ),
+                // --- CENTER TEXT ---
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("TOTAL", style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
+                    Text(
+                        "RM ${(totalFlow).toStringAsFixed(0)}",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 25), // Increased gap
+          const SizedBox(width: 25),
           Expanded(
             flex: 1,
             child: Column(
@@ -83,6 +145,111 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+// The new Category Spending UI
+  Widget _buildCategorySpending(Map<String, double> categories, double totalDebits, ColorScheme theme) {
+    List<Color> palette = [
+      Colors.purpleAccent,
+      Colors.cyanAccent,
+      Colors.orangeAccent,
+      Colors.pinkAccent,
+      Colors.blueAccent,
+      Colors.lightGreenAccent,
+      Colors.yellowAccent,
+      Colors.greenAccent,
+    ];
+    int i = 0;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E2C),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 1,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                PieChart(
+                  PieChartData(
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 38,
+                    sections: categories.entries.map((e) {
+                      final color = palette[i % palette.length];
+                      i++;
+                      return PieChartSectionData(
+                        color: color,
+                        value: e.value,
+                        title: '', // Titles inside slices can look messy, so we hide them
+                        radius: 16,
+                      );
+                    }).toList(),
+                  ),
+                ),
+                // --- CENTER TEXT ---
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text("SPENT", style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
+                    Text(
+                        "RM ${totalDebits.toStringAsFixed(0)}",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 25),
+          Expanded(
+            flex: 1,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("SPENDING BY COURSE", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 12),
+                ...categories.entries.take(4).map((e) {
+                  int idx = categories.keys.toList().indexOf(e.key);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: palette[idx % palette.length])),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(
+                                "${((e.value / (totalDebits > 0 ? totalDebits : 1)) * 100).toStringAsFixed(0)}% ${e.key}",
+                                style: const TextStyle(color: Colors.white70, fontSize: 10),
+                                overflow: TextOverflow.ellipsis
+                            )
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDot(int index) {
+    return Container(
+      width: 6,
+      height: 6,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _currentPage == index ? const Color(0xFF9D59FF) : Colors.white10,
       ),
     );
   }
