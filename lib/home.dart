@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'Profile_UI/profile.dart';
 import 'Booking_UI/booking.dart';
 import 'Booking_UI/booking_record.dart';
+import 'Booking_UI/public_booking.dart';
+import 'Booking_UI/public_record.dart';
+import 'Payment_UI/payment_read.dart';
 import 'Payment_UI/wallet_topup.dart';
+import 'Payment_UI/wallet_history.dart';
 import 'Payment_UI/FinancialHub_Page.dart';
 import 'package:local_auth/local_auth.dart';
 import 'utils/ui_helpers.dart';
@@ -124,7 +128,13 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: [
             _buildDrawerHeader(theme),
-            const SizedBox(height: 10),
+
+            // Expanded allows the list to scroll if the screen is small
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  const SizedBox(height: 10),
 
             // Nav Items
             _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
@@ -132,16 +142,91 @@ class _MyHomePageState extends State<MyHomePage> {
             _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
             _buildDrawerItem(Icons.calendar_month_outlined, 'Calendar', const BookingPage()),
             _buildDrawerItem(Icons.event_note_outlined, 'Booking History', const BookingRecord()),
+                  _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
+                  _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
+                  _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()),
 
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Divider(color: Colors.white10),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent, // Removes lines above/below when expanded
+                      hoverColor: Colors.transparent,
+                      splashColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      // tilePadding matches the horizontal padding of your other ListTiles (24)
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 24),
+                      leading: Icon(
+                          Icons.calendar_month_outlined,
+                          color: theme.primary.withOpacity(0.7),
+                          size: 22
+                      ),
+                      title: const Text(
+                          'Book a Class',
+                          style: TextStyle(color: Colors.white70, fontSize: 15)
+                      ),
+                      trailing: Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.white38,
+                          size: 20
+                      ),
+                      // This ensures sub-items are indented consistently
+                      childrenPadding: const EdgeInsets.only(left: 12),
+                      children: [
+                        _buildDrawerItem(Icons.person, 'Private Class', const BookingPage()),
+                        _buildDrawerItem(Icons.group, 'Public Class', const PublicBooking()),
+                      ],
+                    ),
+                  ),
+
+                  _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
+
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 24),
+                      leading: Icon(
+                          Icons.event_note_outlined,
+                          color: theme.primary.withOpacity(0.7),
+                          size: 22
+                      ),
+                      title: const Text(
+                          'Booking History',
+                          style: TextStyle(color: Colors.white70, fontSize: 15)
+                      ),
+                      trailing: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.white38,
+                          size: 20
+                      ),
+                      childrenPadding: const EdgeInsets.only(left: 12),
+                      children: [
+                        _buildDrawerItem(
+                            Icons.history_toggle_off,
+                            'Private History',
+                            const BookingRecord()
+                        ),
+                        _buildDrawerItem(
+                            Icons.groups_3_outlined,
+                            'Public History',
+                            const PublicRecord()
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    child: Divider(color: Colors.white10),
+                  ),
+
+                  _buildDrawerItem(Icons.admin_panel_settings_outlined, 'Admin Panel', const Admin()),
+                  _buildDrawerItem(Icons.auto_awesome_motion, 'Classes', const Classes()),
+                ],
+              ),
             ),
 
-            _buildDrawerItem(Icons.admin_panel_settings_outlined, 'Admin Panel', const Admin()),
-            _buildDrawerItem(Icons.auto_awesome_motion, 'Classes', const Classes()),
-
-            const Spacer(),
             const Padding(
               padding: EdgeInsets.all(20.0),
               child: Text("v1.0.4", style: TextStyle(color: Colors.white24, fontSize: 12)),
@@ -280,9 +365,9 @@ class _MyHomePageState extends State<MyHomePage> {
       leading: Icon(icon, color: Theme.of(context).colorScheme.primary.withOpacity(0.7), size: 22),
       title: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 15)),
       onTap: () async {
-        Navigator.pop(context);
+        Navigator.pop(context); // Closes the drawer automatically
         await Navigator.push(context, MaterialPageRoute(builder: (context) => destination));
-        _loadWallet();
+        _loadWallet(); // Refresh wallet in case they spent money
       },
     );
   }
