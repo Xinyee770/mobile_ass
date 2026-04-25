@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'Profile_UI/profile.dart';
 import 'Booking_UI/booking.dart';
 import 'Booking_UI/booking_record.dart';
-import 'Payment_UI/payment_read.dart';
 import 'Payment_UI/wallet_topup.dart';
-import 'Payment_UI/wallet_history.dart';
+import 'Payment_UI/FinancialHub_Page.dart';
+import 'package:local_auth/local_auth.dart';
+import 'utils/ui_helpers.dart';
 import 'Admin_UI/admin.dart';
 import 'Classes_UI/classes.dart';
 import 'services/wallet_service.dart';
@@ -59,12 +60,47 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   final WalletService _walletService = WalletService();
+  final LocalAuthentication auth = LocalAuthentication();
   double walletBalance = 0.00;
+  bool _isBalanceHidden = true; // Default to hidden for privacy
 
   @override
   void initState() {
     super.initState();
     _loadWallet();
+  }
+
+  Future<void> _toggleBalancePrivacy() async {
+    // If it's already visible, just hide it (no auth needed to hide)
+    if (!_isBalanceHidden) {
+      setState(() => _isBalanceHidden = true);
+      return;
+    }
+
+    // If hidden, use your standard authentication logic
+    try {
+      bool canCheck = await auth.canCheckBiometrics;
+      bool isSupported = await auth.isDeviceSupported();
+
+      if (canCheck || isSupported) {
+        bool didAuth = await auth.authenticate(
+          localizedReason: 'Please authenticate to reveal your wallet balance',
+          // Following your pattern: biometricOnly: false allows PIN/Pattern backup
+          biometricOnly: false,
+          persistAcrossBackgrounding: true,
+        );
+
+        if (didAuth) {
+          setState(() => _isBalanceHidden = false);
+        }
+      } else {
+        // If device doesn't support biometrics, just reveal it
+        setState(() => _isBalanceHidden = false);
+      }
+    } catch (e) {
+      debugPrint("Security Error: $e");
+      UIHelpers.showSnack(context, "Authentication failed", isError: true);
+    }
   }
 
   Future<void> _loadWallet() async {
@@ -93,9 +129,8 @@ class _MyHomePageState extends State<MyHomePage> {
             // Nav Items
             _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
             _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
-            _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()), // Using the new unique class name),
+            _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
             _buildDrawerItem(Icons.calendar_month_outlined, 'Calendar', const BookingPage()),
-            _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
             _buildDrawerItem(Icons.event_note_outlined, 'Booking History', const BookingRecord()),
 
             const Padding(
@@ -120,6 +155,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   // Custom Drawer Header to match your "Receipt Scan" look
+  // Custom Drawer Header with Biometric Privacy Toggle
   Widget _buildDrawerHeader(ColorScheme theme) {
     return Container(
       width: double.infinity,
@@ -149,7 +185,8 @@ class _MyHomePageState extends State<MyHomePage> {
             ],
           ),
           const SizedBox(height: 20),
-          // WALLET CHIP
+
+          // --- WALLET CHIP WITH PRIVACY TOGGLE ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -167,9 +204,24 @@ class _MyHomePageState extends State<MyHomePage> {
                     const Text("Balance", style: TextStyle(color: Colors.white70, fontSize: 13)),
                   ],
                 ),
-                Text(
-                  "RM ${walletBalance.toStringAsFixed(2)}",
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                // This section handles the tap and biometric reveal
+                GestureDetector(
+                  onTap: _toggleBalancePrivacy,
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      Text(
+                        _isBalanceHidden ? "RM ••••" : "RM ${walletBalance.toStringAsFixed(2)}",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      const SizedBox(width: 10),
+                      Icon(
+                        _isBalanceHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        size: 16,
+                        color: theme.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
