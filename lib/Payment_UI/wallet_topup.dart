@@ -47,11 +47,24 @@ class _WalletTopUpState extends State<WalletTopUp> {
 
   Future<void> _fetchSavedMethods() async {
     final methods = await _walletService.getSavedPaymentMethods();
+
+    // Sort by ID Descending (Largest ID first)
+    // This usually puts the most recent additions/edits at the start
+    methods.sort((a, b) => (b['id'] as int).compareTo(a['id'] as int));
+
     if (mounted) {
       setState(() {
         _savedMethods = methods;
         _isLoadingMethods = false;
-        if (methods.isNotEmpty) _selectedMethod = methods[0];
+
+        if (methods.isNotEmpty) {
+          _selectedMethod = methods[0];
+
+          // Snap the carousel to the first card so the user sees the "newest" one
+          if (_cardController.hasClients) {
+            _cardController.jumpToPage(0);
+          }
+        }
       });
     }
   }
@@ -87,7 +100,7 @@ class _WalletTopUpState extends State<WalletTopUp> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Matching the "Verified" look from Payment page
-                  const Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 90),
+                  const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 90),
                   const SizedBox(height: 20),
                   const Text(
                     "Top Up Successful",
