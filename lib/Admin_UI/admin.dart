@@ -12,10 +12,10 @@ class Admin extends StatefulWidget {
 class _AdminState extends State<Admin> {
   final supabase = Supabase.instance.client;
 
-  final Color darkBg = const Color(0xFF1A1A1A);
-  final Color cardBg = const Color(0xFF242424);
-  final Color purple = const Color(0xFF3B2F4F);
-  final Color accent = const Color(0xFFC7A6FF);
+  final Color darkBg =  Color(0xFF1A1A1A);
+  final Color cardBg =  Color(0xFF242424);
+  final Color purple =  Color(0xFF3B2F4F);
+  final Color accent =  Color(0xFFC7A6FF);
 
   int selectedIndex = 0;
   bool loading = true;
@@ -56,9 +56,13 @@ class _AdminState extends State<Admin> {
     }
   }
 
-  void showMsg(String msg) {
+  void showMsg(String msg, {Color color = Colors.red}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -75,15 +79,12 @@ class _AdminState extends State<Admin> {
       backgroundColor: darkBg,
       appBar: AppBar(
         backgroundColor: purple,
-        title: const Text(
+        title:  Text(
           "Admin Panel",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            onPressed: loadData,
-            icon: const Icon(Icons.refresh),
-          ),
+          IconButton(onPressed: loadData, icon:  Icon(Icons.refresh)),
         ],
       ),
       body: loading
@@ -91,34 +92,185 @@ class _AdminState extends State<Admin> {
           : pages[selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
-        backgroundColor: const Color(0xFF202020),
+        backgroundColor:  Color(0xFF202020),
         selectedItemColor: accent,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
           setState(() => selectedIndex = index);
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.class_),
-            label: "Classes",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: "Members",
-          ),
+        items:  [
+          BottomNavigationBarItem(icon: Icon(Icons.class_), label: "Classes"),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: "Members"),
           BottomNavigationBarItem(
             icon: Icon(Icons.qr_code_scanner),
             label: "Scan",
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart),
-            label: "Stats",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Stats"),
         ],
       ),
     );
   }
+
+  // =========================
+  // VALIDATION
+  // =========================
+
+  bool validateCourse({
+    required TextEditingController name,
+    required TextEditingController price,
+    required TextEditingController instructor,
+    required TextEditingController level,
+    required TextEditingController capacity,
+    required TextEditingController start,
+    required TextEditingController end,
+    required TextEditingController date,
+    required String? location,
+  }) {
+    if (name.text.trim().isEmpty) {
+      showMsg("Please enter class name");
+      return false;
+    }
+
+    if (double.tryParse(price.text.trim()) == null ||
+        double.parse(price.text.trim()) <= 0) {
+      showMsg("Please enter valid price");
+      return false;
+    }
+
+    if (int.tryParse(instructor.text.trim()) == null) {
+      showMsg("Please enter valid instructor ID");
+      return false;
+    }
+
+    if (level.text.trim().isEmpty) {
+      showMsg("Please enter level");
+      return false;
+    }
+
+    if (int.tryParse(capacity.text.trim()) == null ||
+        int.parse(capacity.text.trim()) <= 0) {
+      showMsg("Please enter valid capacity");
+      return false;
+    }
+
+    if (start.text.trim().isEmpty) {
+      showMsg("Please select start time");
+      return false;
+    }
+
+    if (end.text.trim().isEmpty) {
+      showMsg("Please select end time");
+      return false;
+    }
+
+    if (date.text.trim().isEmpty) {
+      showMsg("Please select date");
+      return false;
+    }
+
+    if (location == null || location.isEmpty) {
+      showMsg("Please select location");
+      return false;
+    }
+
+    return true;
+  }
+
+  // =========================
+  // PICKER FUNCTIONS
+  // =========================
+
+  Future<void> pickTime(TextEditingController controller) async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+
+    if (time != null) {
+      final formatted =
+          "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00";
+      controller.text = formatted;
+    }
+  }
+
+  Future<void> pickDate(TextEditingController controller) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked != null) {
+      controller.text =
+      "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+    }
+  }
+
+  // =========================
+  // PICKER FIELD UI
+  // =========================
+
+  Widget pickerField(
+      TextEditingController controller,
+      String hint,
+      IconData icon,
+      VoidCallback onTap,
+      ) {
+    return Padding(
+      padding:  EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        readOnly: true,
+        onTap: onTap,
+        style:  TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle:  TextStyle(color: Colors.grey),
+          prefixIcon: Icon(icon, color: accent),
+          suffixIcon:  Icon(Icons.arrow_drop_down, color: Colors.grey),
+          filled: true,
+          fillColor:  Color(0xFF1A1A1A),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  Widget locationDropdown({
+    required String? selectedLocation,
+    required Function(String?) onChanged,
+  }) {
+    final locations = ['Studio A', 'Studio B', 'Studio C'];
+
+    return Padding(
+      padding:  EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<String>(
+        value: selectedLocation,
+        dropdownColor: cardBg,
+        style:  TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          hintText: "Location",
+          hintStyle:  TextStyle(color: Colors.grey),
+          prefixIcon: Icon(Icons.location_on, color: accent),
+          filled: true,
+          fillColor:  Color(0xFF1A1A1A),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        items: locations.map((location) {
+          return DropdownMenuItem(
+            value: location,
+            child: Text(location),
+          );
+        }).toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
 
   // =========================
   // COURSES CRUD
@@ -126,11 +278,12 @@ class _AdminState extends State<Admin> {
 
   Widget coursesPage() {
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding:  EdgeInsets.all(16),
       child: Column(
         children: [
           titleRow("Class Management", "Add Class", addCourseDialog),
-          const SizedBox(height: 16),
+           SizedBox(height: 16),
+
           Expanded(
             child: ListView.builder(
               itemCount: courses.length,
@@ -141,23 +294,25 @@ class _AdminState extends State<Admin> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        course['course_name']?.toString() ?? 'No Course Name',
-                        style: const TextStyle(
+                      Text(course['course_name']?.toString() ?? 'No Class Name',
+                        style:  TextStyle(
                           color: Colors.white,
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 12),
+
+                       SizedBox(height: 12),
 
                       infoText("Price: RM ${course['course_price'] ?? 0}"),
-                      infoText("Instructor: ${course['instructor'] ?? '-'}"),
-                      infoText("Schedule: ${course['schedule'] ?? '-'}"),
                       infoText("Level: ${course['level'] ?? '-'}"),
                       infoText("Capacity: ${course['capacity'] ?? '-'}"),
+                      infoText("Instructor ID: ${course['instructor_id'] ?? '-'}",),
+                      infoText("Date: ${course['date'] ?? '-'}"),
+                      infoText("Time: ${course['course_start'] ?? '-'} - ${course['course_end'] ?? '-'}",),
+                      infoText("Location: ${course['location'] ?? '-'}"),
 
-                      const SizedBox(height: 18),
+                      SizedBox(height: 18),
 
                       Row(
                         children: [
@@ -165,18 +320,13 @@ class _AdminState extends State<Admin> {
                             child: actionButton(
                               "Edit",
                               Icons.edit,
-                              const Color(0xFF4A4A4A),
+                              Color(0xFF4A4A4A),
                                   () => editCourseDialog(course),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          SizedBox(width: 12),
                           Expanded(
-                            child: actionButton(
-                              "Delete",
-                              Icons.delete,
-                              const Color(0xFFC91F1F),
-                                  () => deleteCourse(course['course_id']),
-                            ),
+                            child: actionButton("Delete", Icons.delete, Color(0xFFC91F1F), () => deleteCourse(course['course_id']),),
                           ),
                         ],
                       ),
@@ -195,37 +345,53 @@ class _AdminState extends State<Admin> {
     final name = TextEditingController();
     final price = TextEditingController();
     final instructor = TextEditingController();
-    final schedule = TextEditingController();
     final level = TextEditingController();
     final capacity = TextEditingController();
+    final start = TextEditingController();
+    final end = TextEditingController();
+    final date = TextEditingController();
+
+    String? selectedLocation;
 
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: cardBg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title:  Text(
           "Add Class",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              inputField(name, "Class Name"),
-              inputField(price, "Price"),
-              inputField(instructor, "Instructor"),
-              inputField(schedule, "Schedule"),
-              inputField(level, "Level"),
-              inputField(capacity, "Capacity"),
-            ],
-          ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  inputField(name, "Class Name"),
+                  inputField(price, "Price"),
+                  inputField(instructor, "Instructor ID"),
+                  inputField(level, "Level"),
+                  inputField(capacity, "Capacity"),
+                  pickerField(start, "Start Time", Icons.access_time, () => pickTime(start),),
+                  pickerField(end, "End Time", Icons.access_time, () => pickTime(end),),
+                  pickerField(date, "Date", Icons.calendar_today, () => pickDate(date),),
+                  locationDropdown(
+                    selectedLocation: selectedLocation,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedLocation = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text("Cancel"),
+            onPressed: () => Navigator.pop(dialogContext),
+            child:  Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -233,22 +399,44 @@ class _AdminState extends State<Admin> {
               foregroundColor: Colors.black,
             ),
             onPressed: () async {
-              await supabase.from('courses').insert({
-                'course_name': name.text.trim(),
-                'course_price': double.tryParse(price.text.trim()) ?? 0,
-                'instructor': instructor.text.trim(),
-                'schedule': schedule.text.trim(),
-                'level': level.text.trim(),
-                'capacity': int.tryParse(capacity.text.trim()) ?? 20,
-              });
+              if (!validateCourse(
+                name: name,
+                price: price,
+                instructor: instructor,
+                level: level,
+                capacity: capacity,
+                start: start,
+                end: end,
+                date: date,
+                location: selectedLocation,
+              )) {
+                return;
+              }
 
-              if (!mounted) return;
-              Navigator.of(dialogContext).pop();
-              await loadData();
+              try {
+                await supabase.from('courses').insert({
+                  'course_name': name.text.trim(),
+                  'course_price': double.parse(price.text.trim()),
+                  'instructor_id': int.parse(instructor.text.trim()),
+                  'level': level.text.trim(),
+                  'capacity': int.parse(capacity.text.trim()),
+                  'course_start': start.text.trim(),
+                  'course_end': end.text.trim(),
+                  'date': date.text.trim(),
+                  'location': selectedLocation,
+                });
 
-              showMsg("Class added successfully");
+                if (!mounted) return;
+
+                Navigator.pop(dialogContext);
+                await loadData();
+                showMsg("Class added successfully", color: Colors.green);
+              } catch (e) {
+                showMsg("Add failed: $e");
+                debugPrint("ADD COURSE ERROR: $e");
+              }
             },
-            child: const Text("Add"),
+            child:  Text("Add"),
           ),
         ],
       ),
@@ -256,40 +444,60 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> editCourseDialog(Map<String, dynamic> course) async {
-    final name = TextEditingController(text: course['course_name']?.toString() ?? '');
-    final price = TextEditingController(text: course['course_price']?.toString() ?? '');
-    final instructor = TextEditingController(text: course['instructor']?.toString() ?? '');
-    final schedule = TextEditingController(text: course['schedule']?.toString() ?? '');
-    final level = TextEditingController(text: course['level']?.toString() ?? '');
-    final capacity = TextEditingController(text: course['capacity']?.toString() ?? '');
+    final name = TextEditingController(text: course['course_name']?.toString() ?? '',);
+    final price = TextEditingController(text: course['course_price']?.toString() ?? '',);
+    final instructorId = TextEditingController(text: course['instructor_id']?.toString() ?? '',);
+    final level = TextEditingController(text: course['level']?.toString() ?? '',);
+    final capacity = TextEditingController(text: course['capacity']?.toString() ?? '',);
+    final start = TextEditingController(text: course['course_start']?.toString() ?? '',);
+    final end = TextEditingController(text: course['course_end']?.toString() ?? '',);
+    final date = TextEditingController(text: course['date']?.toString() ?? '',);
+
+    String? selectedLocation = course['location']?.toString();
+
+    if (!['Studio A', 'Studio B', 'Studio C'].contains(selectedLocation)) {
+      selectedLocation = null;
+    }
 
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: cardBg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title:  Text(
           "Edit Class",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              inputField(name, "Class Name"),
-              inputField(price, "Price"),
-              inputField(instructor, "Instructor"),
-              inputField(schedule, "Schedule"),
-              inputField(level, "Level"),
-              inputField(capacity, "Capacity"),
-            ],
-          ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return SingleChildScrollView(
+              child: Column(
+                children: [
+                  inputField(name, "Class Name"),
+                  inputField(price, "Price"),
+                  inputField(instructorId, "Instructor ID"),
+                  inputField(level, "Level"),
+                  inputField(capacity, "Capacity"),
+                  pickerField(start, "Start Time", Icons.access_time, () => pickTime(start),),
+                  pickerField(end, "End Time", Icons.access_time, () => pickTime(end),),
+                  pickerField(date, "Date", Icons.calendar_today, () => pickDate(date),),
+                  locationDropdown(
+                    selectedLocation: selectedLocation,
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedLocation = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text("Cancel"),
+            child:  Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -297,22 +505,45 @@ class _AdminState extends State<Admin> {
               foregroundColor: Colors.black,
             ),
             onPressed: () async {
-              await supabase.from('courses').update({
-                'course_name': name.text.trim(),
-                'course_price': double.tryParse(price.text.trim()) ?? 0,
-                'instructor': instructor.text.trim(),
-                'schedule': schedule.text.trim(),
-                'level': level.text.trim(),
-                'capacity': int.tryParse(capacity.text.trim()) ?? 20,
-              }).eq('course_id', course['course_id']);
+              if (!validateCourse(
+                name: name,
+                price: price,
+                instructor: instructorId,
+                level: level,
+                capacity: capacity,
+                start: start,
+                end: end,
+                date: date,
+                location: selectedLocation,
+              )) {
+                return;
+              }
 
-              if (!mounted) return;
-              Navigator.of(dialogContext).pop();
-              await loadData();
+              try {
+                await supabase.from('courses').update({
+                  'course_name': name.text.trim(),
+                  'course_price': double.parse(price.text.trim()),
+                  'instructor_id': int.parse(instructorId.text.trim()),
+                  'level': level.text.trim(),
+                  'capacity': int.parse(capacity.text.trim()),
+                  'course_start': start.text.trim(),
+                  'course_end': end.text.trim(),
+                  'date': date.text.trim(),
+                  'location': selectedLocation,
+                }).eq('course_id', course['course_id']);
 
-              showMsg("Class updated successfully");
+                if (!mounted) return;
+
+                Navigator.of(dialogContext).pop();
+                await loadData();
+
+                showMsg("Class updated successfully", color: Colors.green);
+              } catch (e) {
+                showMsg("Update failed: $e");
+                debugPrint("UPDATE COURSE ERROR: $e");
+              }
             },
-            child: const Text("Save"),
+            child:  Text("Save"),
           ),
         ],
       ),
@@ -320,9 +551,14 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> deleteCourse(dynamic courseId) async {
-    await supabase.from('courses').delete().eq('course_id', courseId);
-    await loadData();
-    showMsg("Class deleted");
+    try {
+      await supabase.from('courses').delete().eq('course_id', courseId);
+      await loadData();
+      showMsg("Class deleted successfully");
+    } catch (e) {
+      showMsg("Delete failed: $e");
+      debugPrint("DELETE COURSE ERROR: $e");
+    }
   }
 
   // =========================
@@ -342,10 +578,10 @@ class _AdminState extends State<Admin> {
     }).toList();
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding:  EdgeInsets.all(16),
       child: Column(
         children: [
-          const Align(
+           Align(
             alignment: Alignment.centerLeft,
             child: Text(
               "Member Database",
@@ -356,16 +592,16 @@ class _AdminState extends State<Admin> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+           SizedBox(height: 12),
           TextField(
             controller: searchController,
-            style: const TextStyle(color: Colors.white),
+            style:  TextStyle(color: Colors.white),
             onChanged: (value) {
               setState(() => searchText = value);
             },
             decoration: InputDecoration(
               hintText: "Search user by name, email, phone...",
-              hintStyle: const TextStyle(color: Colors.grey),
+              hintStyle:  TextStyle(color: Colors.grey),
               prefixIcon: Icon(Icons.search, color: accent),
               filled: true,
               fillColor: cardBg,
@@ -374,7 +610,7 @@ class _AdminState extends State<Admin> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+           SizedBox(height: 12),
           Expanded(
             child: ListView.builder(
               itemCount: filteredUsers.length,
@@ -387,7 +623,7 @@ class _AdminState extends State<Admin> {
                     children: [
                       Text(
                         user['name']?.toString() ?? 'No Name',
-                        style: const TextStyle(
+                        style:  TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -397,7 +633,7 @@ class _AdminState extends State<Admin> {
                       infoText("Phone: ${user['phone'] ?? '-'}"),
                       infoText("Role: ${user['role'] ?? 'member'}"),
                       infoText("User ID: ${user['user_id']}"),
-                      const SizedBox(height: 12),
+                       SizedBox(height: 12),
                       Row(
                         children: [
                           Expanded(
@@ -408,7 +644,7 @@ class _AdminState extends State<Admin> {
                                   () => editUserDialog(user),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                           SizedBox(width: 10),
                           Expanded(
                             child: actionButton(
                               "Delete",
@@ -434,13 +670,15 @@ class _AdminState extends State<Admin> {
     final name = TextEditingController(text: user['name']?.toString());
     final email = TextEditingController(text: user['email']?.toString());
     final phone = TextEditingController(text: user['phone']?.toString());
-    final role = TextEditingController(text: user['role']?.toString() ?? 'member');
+    final role = TextEditingController(
+      text: user['role']?.toString() ?? 'member',
+    );
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: cardBg,
-        title: const Text("Edit Member", style: TextStyle(color: Colors.white)),
+        title:  Text("Edit Member", style: TextStyle(color: Colors.white)),
         content: SingleChildScrollView(
           child: Column(
             children: [
@@ -454,22 +692,25 @@ class _AdminState extends State<Admin> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+            child:  Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: accent),
             onPressed: () async {
-              await supabase.from('users').update({
+              await supabase
+                  .from('users')
+                  .update({
                 'name': name.text,
                 'email': email.text,
                 'phone': phone.text,
                 'role': role.text,
-              }).eq('user_id', user['user_id']);
+              })
+                  .eq('user_id', user['user_id']);
 
               Navigator.of(context, rootNavigator: true).pop();
               loadData();
             },
-            child: const Text("Save"),
+            child:  Text("Save"),
           ),
         ],
       ),
@@ -488,14 +729,14 @@ class _AdminState extends State<Admin> {
   Widget attendancePage() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding:  EdgeInsets.all(20),
         child: adminCard(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.qr_code_scanner, size: 90, color: accent),
-              const SizedBox(height: 16),
-              const Text(
+               SizedBox(height: 16),
+               Text(
                 "Attendance Tracking",
                 style: TextStyle(
                   color: Colors.white,
@@ -503,25 +744,23 @@ class _AdminState extends State<Admin> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
+               SizedBox(height: 8),
+               Text(
                 "Scan member QR code using camera.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey),
               ),
-              const SizedBox(height: 20),
+               SizedBox(height: 20),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: purple),
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const QRScannerPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) =>  QRScannerPage()),
                   );
                 },
-                icon: const Icon(Icons.camera_alt),
-                label: const Text("Start Scan"),
+                icon:  Icon(Icons.camera_alt),
+                label:  Text("Start Scan"),
               ),
             ],
           ),
@@ -559,7 +798,7 @@ class _AdminState extends State<Admin> {
     });
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding:  EdgeInsets.all(16),
       child: GridView.count(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
@@ -573,16 +812,8 @@ class _AdminState extends State<Admin> {
             "RM ${totalRevenue.toStringAsFixed(2)}",
             Icons.account_balance_wallet,
           ),
-          statCard(
-            "Popular Course ID",
-            popularCourseId,
-            Icons.trending_up,
-          ),
-          statCard(
-            "Peak Booking",
-            "$maxBooking bookings",
-            Icons.bar_chart,
-          ),
+          statCard("Popular Course ID", popularCourseId, Icons.trending_up),
+          statCard("Peak Booking", "$maxBooking bookings", Icons.bar_chart),
         ],
       ),
     );
@@ -598,7 +829,7 @@ class _AdminState extends State<Admin> {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style:  TextStyle(
             color: Colors.white,
             fontSize: 24,
             fontWeight: FontWeight.bold,
@@ -607,7 +838,7 @@ class _AdminState extends State<Admin> {
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(backgroundColor: purple),
           onPressed: onPressed,
-          icon: const Icon(Icons.add),
+          icon:  Icon(Icons.add),
           label: Text(buttonText),
         ),
       ],
@@ -615,14 +846,26 @@ class _AdminState extends State<Admin> {
   }
 
   Widget adminCard({required Widget child}) {
-    return Card(
-      color: cardBg,
-      margin: const EdgeInsets.only(bottom: 14),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: child,
+    return Container(
+      margin:  EdgeInsets.only(bottom: 16),
+      padding:  EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient:  LinearGradient(
+          colors: [Color(0xFF1E1E1E), Color(0xFF2A2A2A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 15,
+            offset:  Offset(0, 8),
+          ),
+        ],
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
+      child: child,
     );
   }
 
@@ -633,7 +876,10 @@ class _AdminState extends State<Admin> {
       VoidCallback onPressed,
       ) {
     return ElevatedButton.icon(
-      style: ElevatedButton.styleFrom(backgroundColor: color,foregroundColor: Colors.white,),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+      ),
       onPressed: onPressed,
       icon: Icon(icon),
       label: Text(text),
@@ -646,17 +892,17 @@ class _AdminState extends State<Admin> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: accent, size: 36),
-          const SizedBox(height: 10),
+           SizedBox(height: 10),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey),
+            style:  TextStyle(color: Colors.grey),
           ),
-          const SizedBox(height: 8),
+           SizedBox(height: 8),
           Text(
             value,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style:  TextStyle(
               color: Colors.white,
               fontSize: 21,
               fontWeight: FontWeight.bold,
@@ -669,18 +915,16 @@ class _AdminState extends State<Admin> {
 
   Widget inputField(TextEditingController controller, String hint) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding:  EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
-        style: const TextStyle(color: Colors.white),
+        style:  TextStyle(color: Colors.white),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: Colors.grey),
+          hintStyle:  TextStyle(color: Colors.grey),
           filled: true,
-          fillColor: const Color(0xFF1A1A1A),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          fillColor:  Color(0xFF1A1A1A),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -688,11 +932,8 @@ class _AdminState extends State<Admin> {
 
   Widget infoText(String text) {
     return Padding(
-      padding: const EdgeInsets.only(top: 5),
-      child: Text(
-        text,
-        style: const TextStyle(color: Colors.grey),
-      ),
+      padding:  EdgeInsets.only(top: 5),
+      child: Text(text, style:  TextStyle(color: Colors.grey)),
     );
   }
 }
@@ -702,7 +943,7 @@ class _AdminState extends State<Admin> {
 // =========================
 
 class QRScannerPage extends StatefulWidget {
-  const QRScannerPage({super.key});
+   QRScannerPage({super.key});
 
   @override
   State<QRScannerPage> createState() => _QRScannerPageState();
@@ -728,16 +969,16 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Attendance recorded successfully")),
+         SnackBar(content: Text("Attendance recorded successfully")),
       );
 
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Scan failed: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Scan failed: $e")));
 
       setState(() => scanned = false);
     }
@@ -746,10 +987,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor:  Color(0xFF1A1A1A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF3B2F4F),
-        title: const Text("Scan Attendance QR"),
+        backgroundColor:  Color(0xFF3B2F4F),
+        title:  Text("Scan Attendance QR"),
       ),
       body: MobileScanner(
         onDetect: (capture) {
