@@ -48,6 +48,81 @@ class _BookingUpdateState extends State<BookingUpdate> {
     }
   }
 
+  // --- LOGIC: SHOW CHANGES POPUP ---
+  Future<void> _showSaveChangesConfirmation() async {
+    // Format old and new values for comparison
+    final oldDateStr = DateFormat('EEEE, d MMM yyyy').format(DateTime.parse(widget.booking['booking_date']));
+    final newDateStr = DateFormat('EEEE, d MMM yyyy').format(_selectedDate);
+
+    final oldTime = "${widget.booking['start_time'].substring(0, 5)} - ${widget.booking['end_time'].substring(0, 5)}";
+    final newTime = "${_selectedStart!.substring(0, 5)} - ${_selectedEnd!.substring(0, 5)}";
+
+    String oldLoc = "Unknown";
+    String? dbLocation = widget.booking['location']?.toString();
+    if (dbLocation != null) {
+      final match = studioLocations.firstWhere((s) => s['name'] == dbLocation || dbLocation.contains(s['name']), orElse: () => {});
+      if (match.isNotEmpty) oldLoc = match['name'];
+    }
+    final newLoc = _selectedLocation ?? "Unknown";
+
+    // Check if anything actually changed
+    final bool hasChanges = (oldDateStr != newDateStr) || (oldTime != newTime) || (oldLoc != newLoc);
+
+    if (!hasChanges) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No changes detected to save."), backgroundColor: Colors.white24),
+      );
+      return;
+    }
+
+    // Show Dialog
+    final bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.edit_note, color: Color(0xFF9D59FF)),
+            SizedBox(width: 10),
+            Text("Review Changes", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("You are about to update your booking:", style: TextStyle(color: Colors.white54, fontSize: 13)),
+            const SizedBox(height: 20),
+            // Only display the rows that actually changed
+            if (oldLoc != newLoc) _buildChangeRow("Studio Location", oldLoc, newLoc),
+            if (oldDateStr != newDateStr) _buildChangeRow("Date", oldDateStr, newDateStr),
+            if (oldTime != newTime) _buildChangeRow("Time", oldTime, newTime),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("CANCEL", style: TextStyle(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF9D59FF),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("CONFIRM", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    // Execute update if confirmed
+    if (confirm == true) {
+      _handleUpdate();
+    }
+  }
+
   // --- LOGIC: CANCEL BOOKING (Sets status to Cancelled) ---
   Future<void> _handleCancelAction() async {
     final bool? confirm = await showDialog(
@@ -144,7 +219,8 @@ class _BookingUpdateState extends State<BookingUpdate> {
                 width: double.infinity, height: 56,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: accentColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                  onPressed: _handleUpdate,
+                  // CHANGED: Now calls our new confirmation dialog instead of saving immediately
+                  onPressed: _showSaveChangesConfirmation,
                   child: const Text("SAVE CHANGES", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -163,6 +239,31 @@ class _BookingUpdateState extends State<BookingUpdate> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
+
+  Widget _buildChangeRow(String label, String oldVal, String newVal) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(child: Text(oldVal, style: const TextStyle(color: Colors.white38, decoration: TextDecoration.lineThrough, fontSize: 13))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Icon(Icons.arrow_forward, color: Color(0xFF9D59FF), size: 16),
+              ),
+              Expanded(child: Text(newVal, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
+            ],
+          ),
+        ],
       ),
     );
   }

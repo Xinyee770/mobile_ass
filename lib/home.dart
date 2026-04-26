@@ -136,10 +136,13 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   const SizedBox(height: 10),
 
-            // Nav Items
-            _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
-            _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
-            _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
+                  // Nav Items
+                  _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
+                  _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
+                  _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
+                  _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()),
+                  _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
+
                   Theme(
                     data: Theme.of(context).copyWith(
                       dividerColor: Colors.transparent, // Removes lines above/below when expanded
@@ -158,7 +161,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           'Book a Class',
                           style: TextStyle(color: Colors.white70, fontSize: 15)
                       ),
-                      trailing: Icon(
+                      trailing: const Icon(
                           Icons.keyboard_arrow_down,
                           color: Colors.white38,
                           size: 20
@@ -231,7 +234,6 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  // Custom Drawer Header to match your "Receipt Scan" look
   // Custom Drawer Header with Biometric Privacy Toggle
   Widget _buildDrawerHeader(ColorScheme theme) {
     return Container(
