@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import '../Payment_UI/payment.dart';
 
 class BookingPage extends StatefulWidget {
   const BookingPage({super.key});
@@ -147,7 +148,7 @@ class _BookingPageState extends State<BookingPage> {
       String endTime = df.format(df.parse(_selectedTime!).add(const Duration(hours: 1)));
       final String studioName = studios.firstWhere((s) => s['id'] == selectedStudioId)['name'];
 
-      await supabase.from('booking').insert({
+      final response = await supabase.from('booking').insert({
         'user_id': 1,
         'course_id': selectedCourseId,
         'instructor_id': selectedInstructorId,
@@ -156,12 +157,31 @@ class _BookingPageState extends State<BookingPage> {
         'end_time': endTime,
         'location': studioName,
         'booking_status': 'Confirmed',
-      });
+      }).select();
 
-      _showSnackBar("Booking successful!", Colors.green);
-      Navigator.pop(context);
+      if (response != null && (response as List).isNotEmpty) {
+        final int newBookingId = response[0]['booking_id'];
+
+        if (!mounted) return;
+
+        // 2. Immediate Navigation to Payment Page
+        // We pass the new ID so the payment page knows which booking to pay for
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => Payment(bookingId: newBookingId),
+          ),
+        ).then((_) {
+          // Refresh slots when they come back to the booking page
+          _fetchBusySlots();
+        });
+
+        _showSnackBar("Booking Confirmed! Proceeding to payment...", Colors.green);
+      }
     } catch (e) {
-      _showSnackBar("Error: $e", Colors.red);
+      _showSnackBar("Booking failed: $e", Colors.red);
+    } finally {
+      if (mounted) setState(() => isCheckingSlots = false);
     }
   }
 

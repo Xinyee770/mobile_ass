@@ -140,12 +140,6 @@ class _MyHomePageState extends State<MyHomePage> {
             _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
             _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
             _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
-            _buildDrawerItem(Icons.calendar_month_outlined, 'Calendar', const BookingPage()),
-            _buildDrawerItem(Icons.event_note_outlined, 'Booking History', const BookingRecord()),
-                  _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
-                  _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
-                  _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()),
-
                   Theme(
                     data: Theme.of(context).copyWith(
                       dividerColor: Colors.transparent, // Removes lines above/below when expanded
@@ -177,8 +171,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       ],
                     ),
                   ),
-
-                  _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
 
                   Theme(
                     data: Theme.of(context).copyWith(
