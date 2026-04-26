@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import '../Payment_UI/payment.dart';
 
 class PublicBooking extends StatefulWidget {
   const PublicBooking({super.key});
@@ -60,7 +61,7 @@ class _PublicBookingPageState extends State<PublicBooking> {
       DateTime startDT = df.parse(startTime);
       String endTime = df.format(startDT.add(const Duration(hours: 1)));
 
-      await supabase.from('booking').insert({
+      final response = await supabase.from('booking').insert({
         'user_id': 1,
         'course_id': selectedCourseId,
         'instructor_id': selectedCourseData!['instructor_id'],
@@ -68,11 +69,23 @@ class _PublicBookingPageState extends State<PublicBooking> {
         'start_time': startTime,
         'end_time': endTime, // Now sending valid end_time
         'booking_status': 'Confirmed',
-      });
+      }).select();
+      if (response != null && (response as List).isNotEmpty) {
+        final int newBookingId = response[0]['booking_id'];
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Joined Successfully!"), backgroundColor: Colors.green));
-        Navigator.pop(context);
+        if (!mounted) return;
+
+        // 2. Navigate to Payment
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => Payment(bookingId: newBookingId),
+          ),
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Joined! Redirecting to payment..."), backgroundColor: Colors.blue)
+        );
       }
     } catch (e) {
       debugPrint("Booking Error: $e");
