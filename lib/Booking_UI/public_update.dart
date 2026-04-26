@@ -90,20 +90,25 @@ class _PublicUpdateState extends State<PublicUpdate> {
             // --- CANCELLED INDICATOR ---
             if (isCancelled) _buildStatusBanner(dangerColor),
 
+            // 1. COURSE INFORMATION
             _sectionLabel("COURSE INFORMATION"),
             _buildDetailTile(Icons.auto_awesome, "Class Name", widget.booking['courses']?['course_name'] ?? "Public Class", accentColor),
             const SizedBox(height: 12),
             _buildDetailTile(Icons.person_outline, "Instructor", widget.booking['instructor']?['instructor_name'] ?? "Studio Instructor", accentColor),
 
             const SizedBox(height: 32),
+
+            // 2. LOCATION (Moved up)
+            _sectionLabel("LOCATION"),
+            _buildDetailTile(Icons.location_on_outlined, "Studio Location", widget.booking['location'] ?? "Main Studio", accentColor),
+
+            const SizedBox(height: 32),
+
+            // 3. TIME & SCHEDULE (Moved down)
             _sectionLabel("TIME & SCHEDULE"),
             _buildDetailTile(Icons.calendar_today_outlined, "Date", formattedDate, accentColor),
             const SizedBox(height: 12),
             _buildDetailTile(Icons.access_time, "Time Slot", "${widget.booking['start_time']} - ${widget.booking['end_time']}", accentColor),
-
-            const SizedBox(height: 32),
-            _sectionLabel("LOCATION"),
-            _buildDetailTile(Icons.location_on_outlined, "Studio Location", widget.booking['location'] ?? "Main Studio", accentColor),
 
             const SizedBox(height: 60),
 
