@@ -307,6 +307,11 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     final booking = item['booking'];
     final bStatus = booking['booking_status'] ?? 'Confirmed';
 
+    final instructor = booking['instructor'];
+    final String courseType = (instructor != null && instructor['is_private'] == true)
+        ? "Private Class"
+        : "Public Class";
+
     // Format the Payment Date (when the money was moved)
     String paymentDate = "N/A";
     if (item['created_at'] != null) {
@@ -348,8 +353,10 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   booking['courses']['course_name'],
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)
               ),
-              const SizedBox(height: 10),
-
+              const SizedBox(height: 4),
+              Text(courseType.toUpperCase(),
+                  style: TextStyle(color: primaryPurple, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const SizedBox(height: 12),
               // Focused Metadata: Payment Date & Booking ID (No Location)
               Row(
                 children: [
@@ -411,6 +418,11 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     final status = item['status'].toString().toLowerCase();
     final bool isRefunded = status == 'refunded';
 
+    final instructor = item['booking']?['instructor'];
+    final String courseType = (instructor != null && instructor['is_private'] == true)
+        ? "Private Class"
+        : "Public Class";
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -435,14 +447,20 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
             _buildDetailRow("Transaction ID", "TXN-${item['payment_id']}"),
             _buildDetailRow("Method", item['payment_method'] ?? "Wallet Payment"),
             _buildDetailRow("Payment Date", item['created_at']?.split('T')[0] ?? "N/A"),
-            _buildDetailRow("Status", status.toUpperCase(),
-                valueColor: isRefunded ? Colors.redAccent : Colors.greenAccent),
+            _buildDetailRow(
+              "Status",
+              status.toUpperCase(),
+              valueColor: status == 'refunded'
+                  ? Colors.redAccent
+                  : (status == 'pending' ? Colors.orangeAccent : Colors.greenAccent),
+            ),
 
             const SizedBox(height: 20),
 
             // --- SECTION 2: BOOKING INFO (The "Product") ---
             _filterLabel("PURCHASE DETAILS"),
             _buildDetailRow("Course", item['booking']['courses']['course_name']),
+            _buildDetailRow("Class Type", courseType),
             _buildDetailRow("Booking ID", "#${item['booking_id']}"),
             _buildDetailRow(
                 "Booking Status",

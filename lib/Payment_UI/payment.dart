@@ -190,6 +190,9 @@ class _PaymentState extends State<Payment> {
           _userBalance = snapshot.data![1]; // Update balance
           final price = (data['courses']['course_price'] as num).toDouble();
 
+          final bool isPrivate = data['instructor']?['is_private'] ?? false;
+          final String categoryLabel = isPrivate ? "Private Lesson" : "Public Class";
+
           if (_pendingPaymentId == null) {
             _service.createPendingPayment(bookingId: widget.bookingId, amount: price).then((id) {
               if (mounted && _pendingPaymentId == null) {
@@ -217,6 +220,7 @@ class _PaymentState extends State<Payment> {
                       _buildSummaryHeader(data['courses']['course_name'], price),
                       Divider(height: 30, color: Colors.white10),
                       _buildDetailRow("Booking ID", "#${widget.bookingId}"),
+                      _buildDetailRow("Class Type", categoryLabel),
                       _buildDetailRow("Location", data['location'] ?? "Main Studio"),
                       _buildDetailRow("Date", data['booking_date'] ?? "TBD"),
                       _buildDetailRow("Time", "${UIHelpers.formatTime(data['start_time'])} - ${UIHelpers.formatTime(data['end_time'])}"),
