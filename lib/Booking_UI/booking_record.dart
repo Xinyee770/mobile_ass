@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'booking_update.dart'; // Adjust if your filename is different
+import 'booking_update.dart';
 
 class BookingRecord extends StatefulWidget {
   const BookingRecord({super.key});
@@ -19,6 +19,16 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
   final Color textGrey = const Color(0xFF8B8B9E);
   final Color brandPurple = const Color(0xFF9D59FF);
 
+  // Helper to format time strings (HH:mm:ss -> HH:mm)
+  String _formatTime(String? time) {
+    if (time == null || time.isEmpty) return "-";
+    try {
+      return time.substring(0, 5);
+    } catch (e) {
+      return time;
+    }
+  }
+
   Future<List<dynamic>> _fetchPrivateBookings() async {
     final response = await supabase
         .from('booking')
@@ -30,7 +40,6 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
         ''')
         .order('booking_date', ascending: false);
 
-    // 🚀 FILTER: Only keep bookings where the instructor is private!
     final privateBookings = (response as List).where((booking) {
       final inst = booking['instructor'];
       return inst != null && inst['is_private'] == true;
@@ -41,7 +50,6 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
 
   String _calculateStatus(dynamic booking) {
     String rawBookingStatus = (booking['booking_status'] ?? "").toString().toLowerCase();
-
     if (rawBookingStatus == 'cancelled') return "Cancelled";
     if (rawBookingStatus == 'attended' || rawBookingStatus == 'done') return "Attend";
 
@@ -55,7 +63,6 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
       }
       if (pStatus == 'paid') return "Confirmed";
     }
-
     return "Confirmed";
   }
 
@@ -84,47 +91,35 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return Center(child: CircularProgressIndicator(color: brandPurple));
                 }
-
                 if (snapshot.hasError) {
-                  return Center(child: Text("Database Error: ${snapshot.error}", style: const TextStyle(color: Colors.redAccent)));
+                  return Center(child: Text("Database Error", style: TextStyle(color: textGrey)));
                 }
-
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return Center(child: Text("No private bookings found.", style: TextStyle(color: textGrey, fontSize: 16)));
+                  return Center(child: Text("No private bookings found.", style: TextStyle(color: textGrey)));
                 }
 
-                final allBookings = snapshot.data!;
-                final bookings = allBookings.where((b) {
+                final bookings = snapshot.data!.where((b) {
                   if (_selectedFilter == "All") return true;
                   return _calculateStatus(b).toUpperCase() == _selectedFilter.toUpperCase();
                 }).toList();
-
-                if (bookings.isEmpty) {
-                  return Center(child: Text("No $_selectedFilter private bookings.", style: TextStyle(color: textGrey, fontSize: 16)));
-                }
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: bookings.length,
                   itemBuilder: (context, index) {
                     final booking = bookings[index];
-                    String displayStatus = _calculateStatus(booking);
-
-                    // Extract the linked course and instructor data safely
                     final courseData = booking['courses'];
-                    final String displayCourse = courseData?['course_name'] ?? "Private Lesson";
-
                     final instructorData = booking['instructor'];
-                    final String displayInstructor = instructorData?['instructor_name'] ?? "TBA";
 
                     return _buildBookingCard(
-                      courseName: displayCourse,
-                      instructorName: displayInstructor,
-                      instructorComment: "No notes.",
+                      courseName: courseData?['course_name'] ?? "Private Lesson",
+                      instructorName: instructorData?['instructor_name'] ?? "TBA",
+                      instructorComment: "No notes available.",
                       date: booking['booking_date']?.toString() ?? "-",
-                      time: "${booking['start_time'] ?? ''} - ${booking['end_time'] ?? ''}",
+                      startTime: _formatTime(booking['start_time']),
+                      endTime: _formatTime(booking['end_time']),
                       location: booking['location']?.toString() ?? "Private Studio",
-                      status: displayStatus,
+                      status: _calculateStatus(booking),
                       onEdit: () {
                         Navigator.push(
                           context,
@@ -147,7 +142,8 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
     required String instructorName,
     required String instructorComment,
     required String date,
-    required String time,
+    required String startTime,
+    required String endTime,
     required String location,
     required String status,
     required VoidCallback onEdit,
@@ -155,10 +151,7 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -167,8 +160,8 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
             children: [
               _buildDynamicStatusBadge(status),
               IconButton(
-                constraints: const BoxConstraints(),
                 padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
                 icon: Icon(Icons.edit_note, color: textGrey, size: 28),
                 onPressed: onEdit,
               ),
@@ -177,28 +170,40 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
           const SizedBox(height: 16),
           Text(courseName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
+
+          // DATE ROW
           Row(
             children: [
               Icon(Icons.calendar_today_outlined, color: textGrey, size: 16),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(date, style: TextStyle(color: textGrey, fontSize: 14)),
-              const SizedBox(width: 24),
+            ],
+          ),
+          const SizedBox(height: 10), // Gap between date and time
+
+          // TIME ROW (Now under date)
+          Row(
+            children: [
               Icon(Icons.access_time, color: textGrey, size: 16),
-              const SizedBox(width: 6),
-              Text(time, style: TextStyle(color: textGrey, fontSize: 14)),
+              const SizedBox(width: 8),
+              Text("$startTime - $endTime", style: TextStyle(color: textGrey, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 10),
+
+          // LOCATION ROW
           Row(
             children: [
               Icon(Icons.location_on_outlined, color: textGrey, size: 16),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(location, style: TextStyle(color: textGrey, fontSize: 14)),
             ],
           ),
+
           const SizedBox(height: 16),
           const Divider(color: Color(0xFF2A2A35), thickness: 1),
           const SizedBox(height: 12),
+
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -206,15 +211,14 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("NOTES", style: TextStyle(color: textGrey.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+                    Text("NOTES", style: TextStyle(color: textGrey.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 4),
-                    Text(instructorComment, style: TextStyle(color: textGrey, fontSize: 13, fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(instructorComment, style: TextStyle(color: textGrey, fontSize: 13, fontStyle: FontStyle.italic)),
                   ],
                 ),
               ),
               const SizedBox(width: 16),
               Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.person_outline, color: textGrey, size: 16),
                   const SizedBox(width: 6),
@@ -256,37 +260,27 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
   Widget _buildDynamicStatusBadge(String status) {
     Color badgeBgColor;
     Color badgeTextColor;
-
     switch (status.toUpperCase()) {
       case 'CONFIRMED':
-      case 'SUCCESS':
         badgeBgColor = const Color(0xFF183336);
         badgeTextColor = const Color(0xFF4DD0E1);
         break;
       case 'CANCELLED':
-      case 'CANCEL':
-      case 'DELETED':
         badgeBgColor = const Color(0xFF3E1F1F);
         badgeTextColor = const Color(0xFFE57373);
         break;
       case 'ATTEND':
-      case 'DONE':
         badgeBgColor = brandPurple.withOpacity(0.15);
         badgeTextColor = brandPurple;
-        break;
-      case 'PENDING':
-        badgeBgColor = const Color(0xFF3E2B1F);
-        badgeTextColor = const Color(0xFFFFB74D);
         break;
       default:
         badgeBgColor = const Color(0xFF2A2A35);
         badgeTextColor = textGrey;
     }
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: badgeBgColor, borderRadius: BorderRadius.circular(8)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: badgeTextColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+      child: Text(status.toUpperCase(), style: TextStyle(color: badgeTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 }
