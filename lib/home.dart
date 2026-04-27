@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'Authentication_UI/login.dart';
 import 'Profile_UI/profile.dart';
 import 'Booking_UI/booking.dart';
 import 'Booking_UI/booking_record.dart';
@@ -64,11 +66,13 @@ class _MyHomePageState extends State<MyHomePage> {
   final LocalAuthentication auth = LocalAuthentication();
   double walletBalance = 0.00;
   bool _isBalanceHidden = true; // Default to hidden for privacy
+  String userName = "User"; // Default name = user if no user login
 
   @override
   void initState() {
     super.initState();
     _loadWallet();
+    _loadUserProfile();
   }
 
   Future<void> _toggleBalancePrivacy() async {
@@ -111,6 +115,73 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _loadUserProfile() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) return;
+
+    try {
+      final data = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .single();
+
+      if (mounted) {
+        setState(() {
+          userName = data['name'] ?? "User";
+        });
+      }
+    } catch (e) {
+      debugPrint("Profile load error: $e");
+    }
+  }
+
+  // Logout confirmation popout
+  Future<void> _confirmLogout() async {
+    final supabase = Supabase.instance.client;
+
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2C),
+          title: const Text("Sign Out", style: TextStyle(color: Colors.white)),
+          content: const Text(
+            "Are you sure you want to sign out?",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                "Sign Out",
+                style: TextStyle(color: Color(0xFF9D59FF)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout == true) {
+      await supabase.auth.signOut();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+            (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).colorScheme;
@@ -137,6 +208,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
                   _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
                   _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
+
 
                   Theme(
                     data: Theme.of(context).copyWith(
@@ -210,11 +282,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                     child: Divider(color: Colors.white10),
                   ),
-
-                  _buildDrawerItem(Icons.admin_panel_settings_outlined, 'Admin Panel', const Admin()),
-
-                ],
-              ),
+                  
+                  _buildDrawerItem(Icons.logout, 'Sign Out', null, onTap: _confirmLogout,),],),
             ),
 
             const Padding(
@@ -249,11 +318,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Icon(Icons.person, color: theme.primary, size: 30),
               ),
               const SizedBox(width: 15),
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text("Hello,", style: TextStyle(color: Colors.white54, fontSize: 14)),
-                  Text("User One", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(userName, style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               )
             ],
@@ -348,15 +417,34 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget _buildDrawerItem(IconData icon, String label, Widget destination) {
+  Widget _buildDrawerItem(
+      IconData icon,
+      String label,
+      Widget? destination, {
+        VoidCallback? onTap,
+      }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(icon, color: Theme.of(context).colorScheme.primary.withOpacity(0.7), size: 22),
-      title: Text(label, style: const TextStyle(color: Colors.white70, fontSize: 15)),
+      leading: Icon(icon,
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
+          size: 22),
+      title: Text(label,
+          style: const TextStyle(color: Colors.white70, fontSize: 15)),
       onTap: () async {
-        Navigator.pop(context); // Closes the drawer automatically
-        await Navigator.push(context, MaterialPageRoute(builder: (context) => destination));
-        _loadWallet(); // Refresh wallet in case they spent money
+        Navigator.pop(context);
+
+        if (onTap != null) {
+          onTap();
+          return;
+        }
+
+        if (destination != null) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => destination),
+          );
+          _loadWallet();
+        }
       },
     );
   }

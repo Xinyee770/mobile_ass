@@ -87,7 +87,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
       final msg = e.message.toLowerCase();
 
-      if (msg.contains("rate")) {
+      if (msg.contains("exceeded")) {
         message = "Supabase email limit exceeded..\n(need to wait for an hour)";
       } else if (msg.contains("email")) {
         message = "Invalid email address";
@@ -98,9 +98,9 @@ class _RegisterPageState extends State<RegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
+    } finally {
+      setState(() => isLoading = false);
     }
-
-    setState(() => isLoading = false);
   }
 
   @override
@@ -112,7 +112,11 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       backgroundColor: bgDeep,
       appBar: AppBar(
-        title: const Text("Register"),
+        title: const Text(
+          "Register",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -143,7 +147,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 20),
 
                 _buildInput(passwordController, "Password", Icons.lock, true),
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
 
                 _buildInput(confirmPasswordController, "Confirm Password", Icons.lock, true),
                 const SizedBox(height: 30),
@@ -161,9 +165,14 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                     child: isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text("Register"),
+                        : const Text(
+                      "Register",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
+
+                const SizedBox(height: 80),
               ],
             ),
           ),
