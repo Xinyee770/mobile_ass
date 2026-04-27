@@ -36,12 +36,22 @@ class _AdminState extends State<Admin> {
     loadData();
   }
 
+  // Fetch profile to members tab
+  Future<List<dynamic>> fetchMembers() async {
+    final data = await supabase
+        .from('profiles')
+        .select()
+        .order('created_at', ascending: false);
+
+    return data;
+  }
+
   Future<void> loadData() async {
     setState(() => loading = true);
 
     try {
       final courseData = await supabase.from('courses').select();
-      final userData = await supabase.from('users').select();
+      final userData = await supabase.from('profiles').select();
       final bookingData = await supabase.from('booking').select();
       final paymentData = await supabase.from('payment').select();
 
@@ -591,11 +601,8 @@ class _AdminState extends State<Admin> {
       final keyword = searchText.toLowerCase();
       final name = user['name']?.toString().toLowerCase() ?? '';
       final email = user['email']?.toString().toLowerCase() ?? '';
-      final phone = user['phone']?.toString().toLowerCase() ?? '';
 
-      return name.contains(keyword) ||
-          email.contains(keyword) ||
-          phone.contains(keyword);
+      return name.contains(keyword) || email.contains(keyword);
     }).toList();
 
     return Padding(
@@ -643,17 +650,17 @@ class _AdminState extends State<Admin> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user['name']?.toString() ?? 'No Name',
-                        style:  TextStyle(
+                        user['name'] ?? 'No Name',
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       infoText("Email: ${user['email'] ?? '-'}"),
-                      infoText("Phone: ${user['phone'] ?? '-'}"),
+                      infoText("Passes: ${user['passes'] ?? 0}"),
                       infoText("Role: ${user['role'] ?? 'member'}"),
-                      infoText("User ID: ${user['user_id']}"),
+                      infoText("User ID: ${user['id']}"),
                        SizedBox(height: 12),
                       Row(
                         children: [
@@ -688,50 +695,50 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> editUserDialog(Map<String, dynamic> user) async {
-    final name = TextEditingController(text: user['name']?.toString());
-    final email = TextEditingController(text: user['email']?.toString());
-    final phone = TextEditingController(text: user['phone']?.toString());
-    final role = TextEditingController(
-      text: user['role']?.toString() ?? 'member',
-    );
+    final name = TextEditingController(text: user['name']);
+    final email = TextEditingController(text: user['email']);
+    final passes = TextEditingController(text: user['passes'].toString());
 
     await showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: cardBg,
-        title:  Text("Edit Member", style: TextStyle(color: Colors.white)),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              inputField(name, "Name"),
-              inputField(email, "Email"),
-              inputField(phone, "Phone"),
-              inputField(role, "Role"),
-            ],
-          ),
+        title: const Text("Edit Member", style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            inputField(name, "Name"),
+            inputField(email, "Email"),
+            inputField(passes, "Passes"),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child:  Text("Cancel"),
+            child: const Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: accent),
             onPressed: () async {
-              await supabase
-                  .from('users')
-                  .update({
-                'name': name.text,
-                'email': email.text,
-                'phone': phone.text,
-                'role': role.text,
-              })
-                  .eq('user_id', user['user_id']);
+              try {
+                await supabase
+                    .from('profiles')
+                    .update({
+                  'name': name.text.trim(),
+                  'email': email.text.trim(),
+                  'passes': int.tryParse(passes.text.trim()) ?? 0,
+                })
+                    .eq('id', user['id']);
 
-              Navigator.of(context, rootNavigator: true).pop();
-              loadData();
+                Navigator.pop(context);
+                await loadData();
+
+                showMsg("Member updated successfully", color: Colors.green);
+              } catch (e) {
+                showMsg("Update failed: $e");
+              }
             },
-            child:  Text("Save"),
+            child: const Text("Save"),
           ),
         ],
       ),
@@ -739,7 +746,7 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> deleteUser(dynamic userId) async {
-    await supabase.from('users').delete().eq('user_id', userId);
+    await supabase.from('profiles').delete().eq('id', userId);
     loadData();
   }
 
