@@ -4,9 +4,7 @@ import 'Booking_UI/booking.dart';
 import 'Booking_UI/booking_record.dart';
 import 'Booking_UI/public_booking.dart';
 import 'Booking_UI/public_record.dart';
-import 'Payment_UI/payment_read.dart';
 import 'Payment_UI/wallet_topup.dart';
-import 'Payment_UI/wallet_history.dart';
 import 'Payment_UI/FinancialHub_Page.dart';
 import 'package:local_auth/local_auth.dart';
 import 'utils/ui_helpers.dart';
@@ -140,8 +138,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
                   _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
                   _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
-                  _buildDrawerItem(Icons.receipt_long_rounded, 'Wallet History', const WalletTransactionHistory()),
-                  _buildDrawerItem(Icons.history, 'Payment History', const PaymentHistoryPage()),
 
                   Theme(
                     data: Theme.of(context).copyWith(
