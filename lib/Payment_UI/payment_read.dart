@@ -533,7 +533,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
   void _handleRefund(Map<String, dynamic> item) {
     if (item['booking']['booking_status'] != 'Cancelled') {
-      _showWarning("Cancel Booking First", "Please cancel your slot in 'My Bookings' before requesting a refund.");
+      _showWarning("Cancel Booking First", "Please cancel your slot in 'Booking History' before requesting a refund.");
     } else {
       _showRefundReasonSheet(item);
     }
