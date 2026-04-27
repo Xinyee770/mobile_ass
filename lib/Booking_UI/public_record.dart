@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import 'public_update.dart'; // Ensure this matches your filename
+import 'public_update.dart';
 
 class PublicRecord extends StatefulWidget {
   const PublicRecord({super.key});
@@ -13,6 +13,17 @@ class PublicRecord extends StatefulWidget {
 class _PublicRecordState extends State<PublicRecord> {
   final supabase = Supabase.instance.client;
   String activeFilter = "ALL";
+
+  // Helper to format time strings (HH:mm:ss -> HH:mm)
+  String _formatTime(String? time) {
+    if (time == null || time.isEmpty) return "-";
+    try {
+      // Takes '14:30:00' and returns '14:30'
+      return time.substring(0, 5);
+    } catch (e) {
+      return time;
+    }
+  }
 
   Future<List<dynamic>> _fetchPublicBookings() async {
     try {
@@ -103,6 +114,10 @@ class _PublicRecordState extends State<PublicRecord> {
     final String status = (booking['booking_status'] ?? "Confirmed").toString();
     final bool isCancelled = status.toLowerCase() == 'cancelled';
 
+    // Format Times using the helper
+    String startTime = _formatTime(booking['start_time']);
+    String endTime = _formatTime(booking['end_time']);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
@@ -131,14 +146,13 @@ class _PublicRecordState extends State<PublicRecord> {
                   ),
                 ),
               ),
-              // --- NAVIGATION BUTTON ---
               IconButton(
                 icon: const Icon(Icons.edit_note, color: Colors.white30, size: 28),
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => PublicUpdate(booking: booking)),
-                  ).then((_) => setState(() {})); // Refresh list on return
+                  ).then((_) => setState(() {}));
                 },
               ),
             ],
@@ -148,10 +162,15 @@ class _PublicRecordState extends State<PublicRecord> {
               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
 
+          // DATE ROW
           _iconDetail(Icons.calendar_today_outlined, booking['booking_date'] ?? ""),
           const SizedBox(height: 10),
-          _iconDetail(Icons.access_time, "${booking['start_time']} - ${booking['end_time']}"),
+
+          // TIME ROW (Formatted and under the Date)
+          _iconDetail(Icons.access_time, "$startTime - $endTime"),
           const SizedBox(height: 10),
+
+          // LOCATION ROW
           _iconDetail(Icons.location_on_outlined, booking['location'] ?? "Main Studio"),
 
           const SizedBox(height: 20),

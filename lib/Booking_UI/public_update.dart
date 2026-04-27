@@ -23,12 +23,24 @@ class _PublicUpdateState extends State<PublicUpdate> {
     }
   }
 
+  // Helper to format time strings (HH:mm:ss -> HH:mm)
+  String _formatTime(String? time) {
+    if (time == null || time.isEmpty) return "-";
+    try {
+      // Takes '14:30:00' and returns '14:30'
+      return time.substring(0, 5);
+    } catch (e) {
+      return time;
+    }
+  }
+
   // --- LOGIC: CANCEL PUBLIC BOOKING ---
   Future<void> _handleCancelPublic() async {
     final bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Cancel Class", style: TextStyle(color: Colors.white)),
         content: const Text("Are you sure you want to cancel your spot in this class? This cannot be undone."),
         actions: [
@@ -73,6 +85,10 @@ class _PublicUpdateState extends State<PublicUpdate> {
     DateTime date = DateTime.parse(widget.booking['booking_date']);
     String formattedDate = DateFormat('EEEE, d MMMM yyyy').format(date);
 
+    // Format Times
+    String startTime = _formatTime(widget.booking['start_time']);
+    String endTime = _formatTime(widget.booking['end_time']);
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
@@ -98,17 +114,18 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
             const SizedBox(height: 32),
 
-            // 2. LOCATION (Moved up)
+            // 2. LOCATION
             _sectionLabel("LOCATION"),
             _buildDetailTile(Icons.location_on_outlined, "Studio Location", widget.booking['location'] ?? "Main Studio", accentColor),
 
             const SizedBox(height: 32),
 
-            // 3. TIME & SCHEDULE (Moved down)
+            // 3. TIME & SCHEDULE
             _sectionLabel("TIME & SCHEDULE"),
             _buildDetailTile(Icons.calendar_today_outlined, "Date", formattedDate, accentColor),
             const SizedBox(height: 12),
-            _buildDetailTile(Icons.access_time, "Time Slot", "${widget.booking['start_time']} - ${widget.booking['end_time']}", accentColor),
+            // Updated time format here
+            _buildDetailTile(Icons.access_time, "Time Slot", "$startTime - $endTime", accentColor),
 
             const SizedBox(height: 60),
 
