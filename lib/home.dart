@@ -9,7 +9,6 @@ import 'Payment_UI/FinancialHub_Page.dart';
 import 'package:local_auth/local_auth.dart';
 import 'utils/ui_helpers.dart';
 import 'Admin_UI/admin.dart';
-import 'Classes_UI/classes.dart';
 import 'services/wallet_service.dart';
 
 class Home extends StatelessWidget {
@@ -213,7 +212,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
 
                   _buildDrawerItem(Icons.admin_panel_settings_outlined, 'Admin Panel', const Admin()),
-                  _buildDrawerItem(Icons.auto_awesome_motion, 'Classes', const Classes()),
+
                 ],
               ),
             ),
