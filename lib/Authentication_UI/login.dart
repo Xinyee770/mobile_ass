@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_ass/Authentication_UI/register.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../Admin_UI/admin.dart';
 import '../Profile_UI/profile.dart';
+import '../home.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -27,12 +29,32 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text.trim(),
       );
 
+      final user = supabase.auth.currentUser;
+
+      if (user == null) throw Exception("User not found!");
+
+      // Fetch profile
+      final data = await supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .single();
+
+      final role = data['role'];
+
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const Profile()),
-      );
+      if (role == 'admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const Admin()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const Home()),
+        );
+      }
 
     } on AuthException catch (e) {
       String message = "Whoops! Invalid email or password";
@@ -48,13 +70,13 @@ class _LoginPageState extends State<LoginPage> {
 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Uhh.. Something went wrong :/ \nPlease try again!")),
+        SnackBar(content: Text("Uhh.. Something went wrong :/\nPlease try again!")),
       );
     }
+    finally {
+      setState(() => isLoading = false);
+    }
 
-    setState(() => isLoading = false);
-
-    setState(() => isLoading = false);
   }
 
   @override
@@ -109,7 +131,9 @@ class _LoginPageState extends State<LoginPage> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isLoading ? null : login,
+                    onPressed: () {
+                      if (!isLoading) login();
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: brandPurple,
                       padding: const EdgeInsets.symmetric(vertical: 15),
@@ -121,7 +145,7 @@ class _LoginPageState extends State<LoginPage> {
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
                       "Login",
-                      style: TextStyle(fontSize: 16),
+                      style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)
                     ),
                   ),
                 ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../Authentication_UI/login.dart';
+
 class Admin extends StatefulWidget {
   const Admin({super.key});
 
@@ -81,10 +83,18 @@ class _AdminState extends State<Admin> {
         backgroundColor: purple,
         title:  Text(
           "Admin Panel",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         actions: [
-          IconButton(onPressed: loadData, icon:  Icon(Icons.refresh)),
+          IconButton(
+            onPressed: loadData,
+            icon: Icon(Icons.refresh, color: Colors.white),
+          ),
+
+          IconButton(
+            onPressed: signOut,
+            icon: Icon(Icons.logout, color: Colors.white),
+          ),
         ],
       ),
       body: loading
@@ -268,6 +278,17 @@ class _AdminState extends State<Admin> {
         }).toList(),
         onChanged: onChanged,
       ),
+    );
+  }
+
+  Future<void> signOut() async {
+    await supabase.auth.signOut();
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
     );
   }
 
