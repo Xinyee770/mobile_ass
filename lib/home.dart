@@ -185,9 +185,9 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _fetchMETMalaysiaWeather() async {
     try {
       // Endpoint for the 7-day General Forecast
-      // We filter for Kuala Lumpur (Location ID: Tn013)
+      // We filter for Kuala Lumpur
       final response = await http.get(Uri.parse(
-          'https://api.data.gov.my/weather/forecast?contains=Tn107@location__location_id'));
+          'https://api.data.gov.my/weather/forecast?contains=St009@location__location_id'));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);

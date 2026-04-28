@@ -3,7 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../Payment_UI/payment.dart';
+import '../services/notification_service.dart';
 
 class BookingPage extends StatefulWidget {
   const BookingPage({super.key});
@@ -23,7 +25,7 @@ class _BookingPageState extends State<BookingPage> {
 
   final List<String> _allTimeSlots = [
     '09:00:00', '10:00:00', '11:00:00', '13:00:00',
-    '14:00:00', '15:00:00', '16:00:00', '17:00:00'
+    '14:45:00', '15:00:00', '15:10:00', '15:40:00'
   ];
 
   List<Map<String, dynamic>> coursesWithInstructors = [];
@@ -33,7 +35,7 @@ class _BookingPageState extends State<BookingPage> {
   dynamic selectedCourseId;
   dynamic selectedInstructorId;
   String? selectedStudioId;
-  DateTime selectedDate = DateTime.now();
+  DateTime selectedDate = DateTime.now(); // Updated: Default to Today
   String? _selectedTime;
 
   bool isLoading = true;
@@ -114,6 +116,7 @@ class _BookingPageState extends State<BookingPage> {
       String endTime = df.format(df.parse(_selectedTime!).add(const Duration(hours: 1)));
       final String studioName = studios.firstWhere((s) => s['id'] == selectedStudioId)['name'];
 
+      // 1. Insert into Supabase
       final response = await supabase.from('booking').insert({
         'user_id': 1,
         'course_id': selectedCourseId,
@@ -126,14 +129,37 @@ class _BookingPageState extends State<BookingPage> {
       }).select();
 
       if (response != null && (response as List).isNotEmpty) {
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])),
+        // 2. Parse the class start time
+        final timeParts = _selectedTime!.split(':');
+        final classDateTime = DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          int.parse(timeParts[0]),
+          int.parse(timeParts[1]),
         );
+
+        // 3. Schedule Reminder for 5 minutes before
+        try {
+          await NotificationService().scheduleTaskReminder(
+            bookingId: response[0]['booking_id'].toString(),
+            taskTitle: "Private Lesson",
+            taskDateTime: classDateTime,
+            minutesBefore: 5, // Set to 5 minutes as requested
+          );
+          debugPrint("🔔 Reminder scheduled for 5 mins before class.");
+        } catch (e) {
+          debugPrint("⚠️ Notification failed: $e");
+        }
+
+        // 4. Navigate to Payment
+        if (!mounted) return;
+        Navigator.push(context, MaterialPageRoute(
+            builder: (context) => Payment(bookingId: response[0]['booking_id'])
+        ));
       }
     } catch (e) {
-      _showSnackBar("Booking failed", Colors.red);
+      _showSnackBar("Booking failed: $e", Colors.red);
     }
   }
 
@@ -204,11 +230,17 @@ class _BookingPageState extends State<BookingPage> {
             _sectionTitle("5. Available Times"),
             _buildTimeWrap(),
             const SizedBox(height: 48),
+
             SizedBox(
               width: double.infinity, height: 56,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: accentColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                onPressed: (_selectedTime == null || selectedStudioId == null || selectedInstructorId == null) ? null : _showConfirmationDialog,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                ),
+                onPressed: (_selectedTime == null || selectedStudioId == null || selectedInstructorId == null)
+                    ? null
+                    : _showConfirmationDialog,
                 child: const Text("BOOK NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
@@ -218,6 +250,62 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
+  Widget _buildTimeWrap() {
+    if (selectedInstructorId == null) return const Text("Select an instructor first", style: TextStyle(color: Colors.white24));
+    if (isCheckingSlots) return const CircularProgressIndicator();
+
+    final now = DateTime.now();
+    final isToday = selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day;
+
+    return Wrap(
+      spacing: 10, runSpacing: 10,
+      children: _allTimeSlots.map((timeStr) {
+        bool isBusy = busySlots.contains(timeStr);
+
+        // Filter logic: If Today, hide times that have already passed
+        bool hasPassed = false;
+        if (isToday) {
+          final parts = timeStr.split(':');
+          final slotTime = DateTime(now.year, now.month, now.day, int.parse(parts[0]), int.parse(parts[1]));
+          if (slotTime.isBefore(now)) hasPassed = true;
+        }
+
+        bool isDisabled = isBusy || hasPassed;
+
+        return ChoiceChip(
+          label: Text(timeStr.substring(0, 5), style: TextStyle(color: _selectedTime == timeStr ? Colors.white : (isDisabled ? Colors.white12 : Colors.white))),
+          selected: _selectedTime == timeStr,
+          selectedColor: const Color(0xFF9D59FF),
+          backgroundColor: const Color(0xFF1E1E2C),
+          onSelected: isDisabled ? null : (val) => setState(() => _selectedTime = timeStr),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildDateButton() {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+            context: context,
+            initialDate: selectedDate,
+            firstDate: DateTime.now(), // Prevents selecting past dates
+            lastDate: DateTime.now().add(const Duration(days: 90))
+        );
+        if (picked != null) { setState(() => selectedDate = picked); _fetchBusySlots(); }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(DateFormat('EEEE, d MMM yyyy').format(selectedDate), style: const TextStyle(color: Colors.white)),
+          const Icon(Icons.calendar_today, color: Color(0xFF9D59FF), size: 20),
+        ]),
+      ),
+    );
+  }
+
+  // --- UI Helpers ---
   Widget _buildStudioLocationRow() {
     return Row(children: [
       Expanded(
@@ -232,23 +320,9 @@ class _BookingPageState extends State<BookingPage> {
       ),
       const SizedBox(width: 8),
       _iconButton(Icons.my_location, _selectNearestStudio),
-      const SizedBox(width: 8),
-      // --- ADDED MAP BUTTON ---
-      _iconButton(Icons.map_outlined, () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => StudioMapScreen(
-              studios: studios,
-              onStudioSelected: (id) => setState(() => selectedStudioId = id),
-            ),
-          ),
-        );
-      }),
     ]);
   }
 
-  // --- UI Helpers ---
   Widget _buildCourseDropdown() {
     return DropdownButtonFormField<dynamic>(
       value: selectedCourseId,
@@ -281,41 +355,6 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  Widget _buildDateButton() {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
-        if (picked != null) { setState(() => selectedDate = picked); _fetchBusySlots(); }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12)),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(DateFormat('EEEE, d MMM yyyy').format(selectedDate), style: const TextStyle(color: Colors.white)),
-          const Icon(Icons.calendar_today, color: Color(0xFF9D59FF), size: 20),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildTimeWrap() {
-    if (selectedInstructorId == null) return const Text("Select an instructor first", style: TextStyle(color: Colors.white24));
-    if (isCheckingSlots) return const CircularProgressIndicator();
-    return Wrap(
-      spacing: 10, runSpacing: 10,
-      children: _allTimeSlots.map((time) {
-        bool isBusy = busySlots.contains(time);
-        return ChoiceChip(
-          label: Text(time.substring(0, 5), style: TextStyle(color: _selectedTime == time ? Colors.white : (isBusy ? Colors.white12 : Colors.white))),
-          selected: _selectedTime == time,
-          selectedColor: const Color(0xFF9D59FF),
-          backgroundColor: const Color(0xFF1E1E2C),
-          onSelected: isBusy ? null : (val) => setState(() => _selectedTime = time),
-        );
-      }).toList(),
-    );
-  }
-
   Widget _buildDialogRow(String label, String val) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))), Expanded(child: Text(": $val", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)))]));
   Widget _iconButton(IconData icon, VoidCallback onTap) => Container(decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12)), child: IconButton(icon: Icon(icon, color: const Color(0xFF9D59FF)), onPressed: onTap));
   Widget _sectionTitle(String text) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)));
@@ -323,7 +362,6 @@ class _BookingPageState extends State<BookingPage> {
   void _showSnackBar(String m, Color c) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
 }
 
-// --- ADDED STUDIO MAP SCREEN ---
 class StudioMapScreen extends StatelessWidget {
   final List<Map<String, dynamic>> studios;
   final Function(String) onStudioSelected;
