@@ -13,7 +13,15 @@ class PaymentService {
   // 1. GLOBAL TEST CONFIGURATION
   // ---------------------------------------------------------
   // Hardcode your test user ID here once.
-  final String _userId = "1";
+  // This gets the ID of the person currently logged into the app
+  String get _userId {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      print("WARNING: No user logged in!");
+      return "";
+    }
+    return user.id; // This returns the UUID string
+  }
 
   // ---------------------------------------------------------
   // 2. DATABASE READ OPERATIONS
@@ -29,22 +37,22 @@ class PaymentService {
   }
 
   // Get full history with joined tables for the History screen
-  // Get full history with joined tables for the History screen
   Future<List<Map<String, dynamic>>> getPaymentHistory() async {
-    final response = await _supabase
-        .from('payment') // Make sure this matches your table name (payment or payments)
-        .select('''
-          *,
-          booking (
-            *,
-            courses (course_name),
-            instructor (*)
-          )
-        ''')
-        .eq('user_id', _userId)
-        .order('created_at', ascending: false);
+    try {
+      // If _userId is "", we skip the database call to avoid the error
+      if (_userId.isEmpty) return [];
 
-    return List<Map<String, dynamic>>.from(response);
+      final response = await _supabase
+          .from('payment')
+          .select('*, booking (*, courses (*), instructor (*))')
+          .eq('user_id', _userId)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print("Database Error: $e");
+      return []; // Returning an empty list triggers the 'Empty State' in UI
+    }
   }
 
   // ---------------------------------------------------------

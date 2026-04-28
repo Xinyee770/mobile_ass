@@ -59,6 +59,9 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return _loading();
           if (snapshot.hasError) return _error(snapshot.error.toString());
+          if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+            return _buildEmptyState();
+          }
           if (!snapshot.hasData || snapshot.data!.isEmpty) return _buildEmptyState();
 
           final List<Map<String, dynamic>> filteredData = _processData(snapshot.data!);
@@ -509,22 +512,51 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
   }
 
   Widget _buildReceiptActions(Map<String, dynamic> item, String status) {
+    // 1. Extract the booking status and convert to lowercase for safety
+    final String bookingStatus = (item['booking']?['booking_status'] ?? '').toString().toLowerCase();
+
     return Column(
       children: [
+        // PDF Export Button (Always visible)
         SizedBox(
-          width: double.infinity, height: 55,
+          width: double.infinity,
+          height: 55,
           child: ElevatedButton.icon(
             onPressed: () => _service.shareReceipt(item),
             icon: const Icon(Icons.share),
             label: const Text("Export Receipt as PDF"),
-            style: ElevatedButton.styleFrom(backgroundColor: primaryPurple, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: primaryPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
+            ),
           ),
         ),
-        if (status == 'success') ...[
+
+        // 2. Updated Logic Gate
+        // Button only shows if: Payment is 'success' AND status is NOT 'attended'
+        if (status == 'success' && bookingStatus != 'attended') ...[
           const SizedBox(height: 12),
           TextButton(
-            onPressed: () { Navigator.pop(context); _handleRefund(item); },
-            child: const Text("Request Refund", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)),
+            onPressed: () {
+              Navigator.pop(context);
+              _handleRefund(item);
+            },
+            child: const Text(
+                "Request Refund",
+                style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600)
+            ),
+          ),
+        ],
+
+        // 3. Optional: Helpful hint for the user
+        if (bookingStatus == 'attended') ...[
+          const SizedBox(height: 16),
+          const Center(
+            child: Text(
+              "Refund unavailable for attended classes.",
+              style: TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic),
+            ),
           ),
         ],
       ],
