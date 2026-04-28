@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Profile extends StatefulWidget {
@@ -12,6 +13,7 @@ class _ProfileState extends State<Profile> {
   final supabase = Supabase.instance.client;
   String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
+  String avatarUrl = "";
   String name = "User";
   String email = "-";
   int passes = 0;
@@ -39,6 +41,7 @@ class _ProfileState extends State<Profile> {
           .single();
 
       setState(() {
+        avatarUrl = data['avatar_url'] ?? "";
         name = data['name'] ?? "User";
         email = data['email'] ?? "-";
         passes = data['passes'] ?? 0;
@@ -59,6 +62,50 @@ class _ProfileState extends State<Profile> {
     } catch (e) {
       debugPrint("Profile load error: $e");
       setState(() => loading = false);
+    }
+  }
+
+  Future<void> uploadAvatar() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return;
+
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final fileBytes = await image.readAsBytes();
+    final fileExt = image.path.split('.').last;
+    final fileName = "${user.id}.$fileExt";
+
+    try {
+      // Upload to storage
+      await supabase.storage
+          .from('avatars')
+          .uploadBinary(fileName, fileBytes,
+          fileOptions: const FileOptions(upsert: true));
+
+      // Get public URL
+      final publicUrl =
+      supabase.storage.from('avatars').getPublicUrl(fileName);
+
+      // Save to database
+      await supabase
+          .from('profiles')
+          .update({'avatar_url': publicUrl})
+          .eq('id', user.id);
+
+      setState(() {
+        avatarUrl = publicUrl;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile picture updated!")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Upload failed: $e")),
+      );
     }
   }
 
@@ -139,10 +186,34 @@ class _ProfileState extends State<Profile> {
             Center(
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 45,
-                    backgroundColor: accent.withOpacity(0.2),
-                    child: const Icon(Icons.person, size: 45, color: Colors.white),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 45,
+                        backgroundColor: accent.withOpacity(0.2),
+                        backgroundImage:
+                        avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                        child: avatarUrl.isEmpty
+                            ? const Icon(Icons.person, size: 45, color: Colors.white)
+                            : null,
+                      ),
+
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: uploadAvatar,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: accent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit, size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 

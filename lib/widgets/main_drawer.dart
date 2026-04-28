@@ -10,6 +10,7 @@ import '../Payment_UI/FinancialHub_Page.dart';
 class MainDrawer extends StatelessWidget {
   final ColorScheme theme;
   final String userName;
+  final String avatarUrl;
   final double walletBalance;
   final bool isBalanceHidden;
   final VoidCallback onTogglePrivacy;
@@ -20,6 +21,7 @@ class MainDrawer extends StatelessWidget {
     super.key,
     required this.theme,
     required this.userName,
+    required this.avatarUrl,
     required this.walletBalance,
     required this.isBalanceHidden,
     required this.onTogglePrivacy,
@@ -96,9 +98,13 @@ class MainDrawer extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                radius: 28,
-                backgroundColor: theme.primary.withOpacity(0.1),
-                child: Icon(Icons.person, color: theme.primary, size: 30),
+                radius: 30,
+                backgroundColor: Colors.grey[800],
+                backgroundImage:
+                avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
+                child: avatarUrl.isEmpty
+                    ? const Icon(Icons.person, color: Colors.white)
+                    : null,
               ),
               const SizedBox(width: 15),
               Column(
