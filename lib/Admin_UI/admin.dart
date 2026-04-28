@@ -701,7 +701,7 @@ class _AdminState extends State<Admin> {
 
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: cardBg,
         title: const Text("Edit Member", style: TextStyle(color: Colors.white)),
         content: Column(
@@ -714,7 +714,7 @@ class _AdminState extends State<Admin> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text("Cancel"),
           ),
           ElevatedButton(
@@ -730,7 +730,7 @@ class _AdminState extends State<Admin> {
                 })
                     .eq('id', user['id']);
 
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 await loadData();
 
                 showMsg("Member updated successfully", color: Colors.green);
@@ -983,7 +983,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   Future<void> saveAttendance(String qrValue) async {
     try {
-      final userId = int.tryParse(qrValue);
+      final userId = qrValue;
 
       if (userId == null) {
         throw Exception("Invalid QR code. QR should contain user_id.");
