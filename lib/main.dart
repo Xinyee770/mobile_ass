@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'Authentication_UI/login.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'services/notification_service.dart';
 import 'home.dart';
 
 Future<void> main() async {
@@ -10,6 +11,9 @@ Future<void> main() async {
     url: 'https://jahawxshukwvqzmahwff.supabase.co',
     anonKey: 'sb_publishable_lEo1DkgG5eBoYRvsooloLg_oeLmU0ky',
   );
+
+  await NotificationService().initialize();
+
   runApp(App());
 }
 
