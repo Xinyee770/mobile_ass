@@ -971,7 +971,7 @@ class _AdminState extends State<Admin> {
 // =========================
 
 class QRScannerPage extends StatefulWidget {
-   QRScannerPage({super.key});
+  const QRScannerPage({super.key});
 
   @override
   State<QRScannerPage> createState() => _QRScannerPageState();
@@ -983,10 +983,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   Future<void> saveAttendance(String qrValue) async {
     try {
-      final userId = int.tryParse(qrValue);
+      int? userId;
+
+      print("QR VALUE: $qrValue");
+      final match = RegExp(r'\d+').firstMatch(qrValue);
+
+      if (match != null) {
+        userId = int.tryParse(match.group(0)!);
+      }
 
       if (userId == null) {
-        throw Exception("Invalid QR code. QR should contain user_id.");
+        throw Exception("Invalid QR code");
       }
 
       await supabase.from('attendance').insert({
@@ -997,16 +1004,15 @@ class _QRScannerPageState extends State<QRScannerPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-         SnackBar(content: Text("Attendance recorded successfully")),
+        SnackBar(content: Text("User $userId checked in")),
       );
 
       Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Scan failed: $e")));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Scan failed: $e")),
+      );
 
       setState(() => scanned = false);
     }
@@ -1015,10 +1021,10 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:  Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF1A1A1A),
       appBar: AppBar(
-        backgroundColor:  Color(0xFF3B2F4F),
-        title:  Text("Scan Attendance QR"),
+        backgroundColor: const Color(0xFF3B2F4F),
+        title: const Text("Scan Attendance QR"),
       ),
       body: MobileScanner(
         onDetect: (capture) {
