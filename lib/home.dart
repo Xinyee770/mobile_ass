@@ -227,9 +227,28 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       body: DashboardView(
         theme: theme,
+        userName: userName,
         weatherData: _malaysiaWeather, // PASS THE DATA
         isLoading: _isLoadingWeather,  // PASS THE LOADING STATE
+        onNavigate: _handleNavigation,
       ),
     );
   }
+// Add this method inside _MyHomePageState
+  void _handleNavigation(Widget page) async {
+    // If the drawer is open, close it first
+    if (Navigator.canPop(context)) {
+      Navigator.pop(context);
+    }
+
+    // Push the new page
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => page),
+    );
+
+    // Refresh wallet balance when returning (in case they topped up)
+    _loadWallet();
+  }
+
 }
