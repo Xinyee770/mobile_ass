@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../Authentication_UI/login.dart';
 
@@ -979,23 +980,47 @@ class QRScannerPage extends StatefulWidget {
 
 class _QRScannerPageState extends State<QRScannerPage> {
   final supabase = Supabase.instance.client;
+  final MobileScannerController scannerController = MobileScannerController();
+
   bool scanned = false;
 
   Future<void> saveAttendance(String qrValue) async {
     try {
-      int? userId;
+      final userId = qrValue.trim();
 
-      print("QR VALUE: $qrValue");
-      final match = RegExp(r'\d+').firstMatch(qrValue);
-
-      if (match != null) {
-        userId = int.tryParse(match.group(0)!);
+      //Invalid QR
+      if (userId.isEmpty) {
+        await showErrorDialog("Invalid QR Code", "QR code is empty.");
+        setState(() => scanned = false);
+        return;
       }
 
-      if (userId == null) {
-        throw Exception("Invalid QR code");
+      //Check user exist
+      final profile = await supabase
+          .from('profiles')
+          .select('name, email')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (profile == null) {
+        await showErrorDialog("Invalid QR", "User not found.");
+        setState(() => scanned = false);
+        return;
       }
 
+      //prevent duplicate check-in
+      final existing = await supabase
+          .from('attendance')
+          .select()
+          .eq('user_id', userId);
+
+      if (existing.isNotEmpty) {
+        await showErrorDialog("Already Checked-in", "This user already checked in.");
+        setState(() => scanned = false);
+        return;
+      }
+
+      //Insert attendance
       await supabase.from('attendance').insert({
         'user_id': userId,
         'status': 'Present',
@@ -1003,19 +1028,127 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("User $userId checked in")),
+      //SUCCESS POPUP
+      await showSuccessDialog(
+        profile['name'] ?? 'Member',
+        profile['email'] ?? '',
       );
-
-      Navigator.pop(context);
 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Scan failed: $e")),
-      );
+      if (!mounted) return;
 
+      await showErrorDialog("Scan Error", e.toString());
       setState(() => scanned = false);
     }
+  }
+
+  Future<void> showErrorDialog(String title, String message) async {
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error, color: Colors.red, size: 60),
+            const SizedBox(height: 12),
+            Text(message, style: const TextStyle(color: Colors.white70)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> showSuccessDialog(String name, String email) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          "Check-in Successful",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 70),
+            const SizedBox(height: 12),
+            Text(name,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(email, style: const TextStyle(color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context); // back to admin
+            },
+            child: const Text("Done"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> scanFromImage() async {
+    try {
+      final picker = ImagePicker();
+
+      final pickedImage = await picker.pickImage(
+        source: ImageSource.gallery,
+      );
+
+      if (pickedImage == null) return;
+
+      final barcodeCapture =
+      await scannerController.analyzeImage(pickedImage.path);
+
+      if (barcodeCapture == null || barcodeCapture.barcodes.isEmpty) {
+        throw Exception("No QR code found in image");
+      }
+
+      final value = barcodeCapture.barcodes.first.rawValue;
+
+      if (value == null || value.isEmpty) {
+        throw Exception("QR code has no value");
+      }
+
+      saveAttendance(value);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Image scan failed: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    scannerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1025,19 +1158,53 @@ class _QRScannerPageState extends State<QRScannerPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF3B2F4F),
         title: const Text("Scan Attendance QR"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.image),
+            onPressed: scanFromImage,
+          ),
+        ],
       ),
-      body: MobileScanner(
-        onDetect: (capture) {
-          if (scanned) return;
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: scannerController,
+            onDetect: (capture) {
+              if (scanned) return;
 
-          final barcode = capture.barcodes.first;
-          final value = barcode.rawValue;
+              final barcode = capture.barcodes.first;
+              final value = barcode.rawValue;
 
-          if (value != null) {
-            scanned = true;
-            saveAttendance(value);
-          }
-        },
+              if (value != null) {
+                scanned = true;
+                saveAttendance(value);
+              }
+            },
+          ),
+
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF9D59FF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: scanFromImage,
+                icon: const Icon(Icons.image_search),
+                label: const Text("Scan QR From Image"),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
