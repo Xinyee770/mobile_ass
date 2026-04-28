@@ -7,6 +7,8 @@ import 'Admin_UI/admin.dart';
 import 'widgets/main_drawer.dart';
 import 'widgets/dashboard_view.dart';
 import 'services/wallet_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class Home extends StatelessWidget {
   const Home({super.key});
@@ -62,12 +64,15 @@ class _MyHomePageState extends State<MyHomePage> {
   double walletBalance = 0.00;
   bool _isBalanceHidden = true; // Default to hidden for privacy
   String userName = "User"; // Default name = user if no user login
+  Map<String, dynamic>? _malaysiaWeather;
+  bool _isLoadingWeather = true;
 
   @override
   void initState() {
     super.initState();
     _loadWallet();
     _loadUserProfile();
+    _fetchMETMalaysiaWeather();
   }
 
   Future<void> _toggleBalancePrivacy() async {
@@ -177,6 +182,28 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _fetchMETMalaysiaWeather() async {
+    try {
+      // Endpoint for the 7-day General Forecast
+      // We filter for Kuala Lumpur (Location ID: Tn013)
+      final response = await http.get(Uri.parse(
+          'https://api.data.gov.my/weather/forecast?contains=Tn107@location__location_id'));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        if (data.isNotEmpty) {
+          setState(() {
+            _malaysiaWeather = data.first;
+            _isLoadingWeather = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("MET Malaysia Error: $e");
+      setState(() => _isLoadingWeather = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).colorScheme;
@@ -198,82 +225,10 @@ class _MyHomePageState extends State<MyHomePage> {
           _loadWallet(); // Refresh wallet if they top up
         },
       ),
-      body: DashboardView(theme: theme),
-    );
-  }
-
-  // Custom Drawer Header with Biometric Privacy Toggle
-  Widget _buildDrawerHeader(ColorScheme theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 25),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2C),
-        border: Border(bottom: BorderSide(color: theme.primary.withOpacity(0.1))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: theme.primary.withOpacity(0.1),
-                child: Icon(Icons.person, color: theme.primary, size: 30),
-              ),
-              const SizedBox(width: 15),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Hello,", style: TextStyle(color: Colors.white54, fontSize: 14)),
-                  Text(userName, style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                ],
-              )
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // --- WALLET CHIP WITH PRIVACY TOGGLE ---
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: theme.primary.withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.account_balance_wallet, size: 18, color: theme.primary),
-                    const SizedBox(width: 10),
-                    const Text("Balance", style: TextStyle(color: Colors.white70, fontSize: 13)),
-                  ],
-                ),
-                // This section handles the tap and biometric reveal
-                GestureDetector(
-                  onTap: _toggleBalancePrivacy,
-                  behavior: HitTestBehavior.opaque,
-                  child: Row(
-                    children: [
-                      Text(
-                        _isBalanceHidden ? "RM ••••" : "RM ${walletBalance.toStringAsFixed(2)}",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                      const SizedBox(width: 10),
-                      Icon(
-                        _isBalanceHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        size: 16,
-                        color: theme.primary,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+      body: DashboardView(
+        theme: theme,
+        weatherData: _malaysiaWeather, // PASS THE DATA
+        isLoading: _isLoadingWeather,  // PASS THE LOADING STATE
       ),
     );
   }
