@@ -64,8 +64,10 @@ class _MyHomePageState extends State<MyHomePage> {
   double walletBalance = 0.00;
   bool _isBalanceHidden = true; // Default to hidden for privacy
   String userName = "User"; // Default name = user if no user login
+  String avatarUrl = "";
   Map<String, dynamic>? _malaysiaWeather;
   bool _isLoadingWeather = true;
+
 
   @override
   void initState() {
@@ -131,6 +133,7 @@ class _MyHomePageState extends State<MyHomePage> {
       if (mounted) {
         setState(() {
           userName = data['name'] ?? "User";
+          avatarUrl = data['avatar_url'] ?? "";
         });
       }
     } catch (e) {
@@ -215,6 +218,7 @@ class _MyHomePageState extends State<MyHomePage> {
       drawer: MainDrawer(
         theme: theme,
         userName: userName,
+        avatarUrl: avatarUrl,
         walletBalance: walletBalance,
         isBalanceHidden: _isBalanceHidden,
         onTogglePrivacy: _toggleBalancePrivacy,
@@ -223,6 +227,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Navigator.pop(context); // Close the drawer
           await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
           _loadWallet(); // Refresh wallet if they top up
+          _loadUserProfile(); // Refresh avatar after returning
         },
       ),
       body: DashboardView(
