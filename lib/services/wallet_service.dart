@@ -7,7 +7,15 @@ class WalletService {
   // 1. GLOBAL TEST CONFIGURATION
   // ---------------------------------------------------------
   // Change this once to update the whole service
-  final String _userId = "1";
+  String get _userId {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      // For testing, you could temporarily return a real UUID string here
+      // if you aren't logged in yet.
+      return "";
+    }
+    return user.id; // This is the UUID from Supabase Auth
+  }
 
   // ---------------------------------------------------------
   // 2. BALANCE OPERATIONS
@@ -16,14 +24,21 @@ class WalletService {
   // Get current balance from your ACTUAL 'wallets' table
   Future<double> getBalance() async {
     try {
+      if (_userId.isEmpty) return 0.0;
+
       final data = await _supabase
-          .from('wallets') // Table Name: wallets
-          .select('balance') // Column Name: balance
+          .from('wallets')
+          .select('balance')
           .eq('user_id', _userId)
           .maybeSingle();
 
+      // --- NEW LOGIC: If no row exists, CREATE it ---
       if (data == null) {
-        print("Warning: No wallet record found for User ID $_userId");
+        print("Initializing new wallet for user: $_userId");
+        await _supabase.from('wallets').insert({
+          'user_id': _userId,
+          'balance': 0.0,
+        });
         return 0.0;
       }
 
