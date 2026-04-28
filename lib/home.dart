@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'Authentication_UI/login.dart';
-import 'Profile_UI/profile.dart';
-import 'Booking_UI/booking.dart';
-import 'Booking_UI/booking_record.dart';
-import 'Booking_UI/public_booking.dart';
-import 'Booking_UI/public_record.dart';
-import 'Payment_UI/wallet_topup.dart';
-import 'Payment_UI/FinancialHub_Page.dart';
 import 'package:local_auth/local_auth.dart';
 import 'utils/ui_helpers.dart';
 import 'Admin_UI/admin.dart';
+import 'widgets/main_drawer.dart';
+import 'widgets/dashboard_view.dart';
 import 'services/wallet_service.dart';
 
 class Home extends StatelessWidget {
@@ -190,111 +185,20 @@ class _MyHomePageState extends State<MyHomePage> {
       onDrawerChanged: (isOpen) => isOpen ? _loadWallet() : null,
       appBar: AppBar(title: Text(widget.title)),
 
-      // --- REDESIGNED DRAWER ---
-      drawer: Drawer(
-        backgroundColor: const Color(0xFF161622),
-        child: Column(
-          children: [
-            _buildDrawerHeader(theme),
-
-            // Expanded allows the list to scroll if the screen is small
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  const SizedBox(height: 10),
-
-                  // Nav Items
-                  _buildDrawerItem(Icons.person_outline, 'User Profile', const Profile()),
-                  _buildDrawerItem(Icons.add_card_outlined, 'Top Up Wallet', const WalletTopUp()),
-                  _buildDrawerItem(Icons.account_balance_wallet_outlined, 'My Transactions', const FinancialHubPage()),
-
-
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      dividerColor: Colors.transparent, // Removes lines above/below when expanded
-                      hoverColor: Colors.transparent,
-                      splashColor: Colors.transparent,
-                    ),
-                    child: ExpansionTile(
-                      // tilePadding matches the horizontal padding of your other ListTiles (24)
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 24),
-                      leading: Icon(
-                          Icons.calendar_month_outlined,
-                          color: theme.primary.withOpacity(0.7),
-                          size: 22
-                      ),
-                      title: const Text(
-                          'Book a Class',
-                          style: TextStyle(color: Colors.white70, fontSize: 15)
-                      ),
-                      trailing: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.white38,
-                          size: 20
-                      ),
-                      // This ensures sub-items are indented consistently
-                      childrenPadding: const EdgeInsets.only(left: 12),
-                      children: [
-                        _buildDrawerItem(Icons.person, 'Private Class', const BookingPage()),
-                        _buildDrawerItem(Icons.group, 'Public Class', const PublicBooking()),
-                      ],
-                    ),
-                  ),
-
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      dividerColor: Colors.transparent,
-                    ),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 24),
-                      leading: Icon(
-                          Icons.event_note_outlined,
-                          color: theme.primary.withOpacity(0.7),
-                          size: 22
-                      ),
-                      title: const Text(
-                          'Booking History',
-                          style: TextStyle(color: Colors.white70, fontSize: 15)
-                      ),
-                      trailing: const Icon(
-                          Icons.keyboard_arrow_down,
-                          color: Colors.white38,
-                          size: 20
-                      ),
-                      childrenPadding: const EdgeInsets.only(left: 12),
-                      children: [
-                        _buildDrawerItem(
-                            Icons.history_toggle_off,
-                            'Private History',
-                            const BookingRecord()
-                        ),
-                        _buildDrawerItem(
-                            Icons.groups_3_outlined,
-                            'Public History',
-                            const PublicRecord()
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    child: Divider(color: Colors.white10),
-                  ),
-                  
-                  _buildDrawerItem(Icons.logout, 'Sign Out', null, onTap: _confirmLogout,),],),
-            ),
-
-            const Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Text("v1.0.4", style: TextStyle(color: Colors.white24, fontSize: 12)),
-            )
-          ],
-        ),
+      drawer: MainDrawer(
+        theme: theme,
+        userName: userName,
+        walletBalance: walletBalance,
+        isBalanceHidden: _isBalanceHidden,
+        onTogglePrivacy: _toggleBalancePrivacy,
+        onLogout: _confirmLogout,
+        onNavigate: (Widget page) async {
+          Navigator.pop(context); // Close the drawer
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+          _loadWallet(); // Refresh wallet if they top up
+        },
       ),
-
-      body: _buildDashboardBody(theme),
+      body: DashboardView(theme: theme),
     );
   }
 
@@ -371,81 +275,6 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildDashboardBody(ColorScheme theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Dashboard Icon with Pulse Glow
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: theme.primary.withOpacity(0.05),
-              boxShadow: [
-                BoxShadow(
-                  color: theme.primary.withOpacity(0.1),
-                  blurRadius: 50,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Icon(Icons.grid_view_rounded, size: 80, color: theme.primary),
-          ),
-          const SizedBox(height: 30),
-          const Text(
-            'ABC Dashboard',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 1),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Swipe for Menu',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem(
-      IconData icon,
-      String label,
-      Widget? destination, {
-        VoidCallback? onTap,
-      }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(icon,
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
-          size: 22),
-      title: Text(label,
-          style: const TextStyle(color: Colors.white70, fontSize: 15)),
-      onTap: () async {
-        Navigator.pop(context);
-
-        if (onTap != null) {
-          onTap();
-          return;
-        }
-
-        if (destination != null) {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => destination),
-          );
-          _loadWallet();
-        }
-      },
     );
   }
 }
