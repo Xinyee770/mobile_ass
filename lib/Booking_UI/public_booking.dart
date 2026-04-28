@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../Payment_UI/payment.dart';
+import '../services/notification_service.dart';
 
 class PublicBooking extends StatefulWidget {
   const PublicBooking({super.key});
@@ -112,12 +113,21 @@ class _PublicBookingPageState extends State<PublicBooking> {
   // --- Actual Booking Logic ---
   Future<void> _executeBooking() async {
     try {
+
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Please login to join a class"))
+        );
+        return;
+      }
+
       final String courseDate = selectedCourseData!['date'] ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
       final String startTime = selectedCourseData!['course_start'] ?? "00:00:00";
       final String endTime = selectedCourseData!['course_end'] ?? "01:00:00";
 
       final response = await supabase.from('booking').insert({
-        'user_id': 1,
+        'user_id': user.id,
         'course_id': selectedCourseId,
         'instructor_id': selectedCourseData!['instructor_id'],
         'booking_date': courseDate,
@@ -127,6 +137,32 @@ class _PublicBookingPageState extends State<PublicBooking> {
       }).select();
 
       if (response != null && (response as List).isNotEmpty) {
+
+        // --- ADDED NOTIFICATION SCHEDULING ---
+        try {
+          final dateParts = courseDate.split('-');
+          final timeParts = startTime.split(':');
+
+          final classDateTime = DateTime(
+            int.parse(dateParts[0]), // year
+            int.parse(dateParts[1]), // month
+            int.parse(dateParts[2]), // day
+            int.parse(timeParts[0]), // hour
+            int.parse(timeParts[1]), // minute
+          );
+
+          await NotificationService().scheduleTaskReminder(
+            bookingId: response[0]['booking_id'].toString(),
+            taskTitle: "Public Class: ${selectedCourseData!['course_name']}",
+            taskDateTime: classDateTime,
+            minutesBefore: 5, // Set to 5 minutes
+          );
+          debugPrint("🔔 Public class reminder scheduled.");
+        } catch (e) {
+          debugPrint("⚠️ Notification failed: $e");
+        }
+        // ------------------------------------
+
         if (!mounted) return;
         Navigator.push(context, MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])));
       }

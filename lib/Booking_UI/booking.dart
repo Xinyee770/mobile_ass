@@ -112,13 +112,17 @@ class _BookingPageState extends State<BookingPage> {
 
   Future<void> _submitBooking() async {
     try {
+      final user = supabase.auth.currentUser;
+
+      if (user == null) return;
+
       final DateFormat df = DateFormat("HH:mm:ss");
       String endTime = df.format(df.parse(_selectedTime!).add(const Duration(hours: 1)));
       final String studioName = studios.firstWhere((s) => s['id'] == selectedStudioId)['name'];
 
       // 1. Insert into Supabase
       final response = await supabase.from('booking').insert({
-        'user_id': 1,
+        'user_id': user.id,
         'course_id': selectedCourseId,
         'instructor_id': selectedInstructorId,
         'booking_date': DateFormat('yyyy-MM-dd').format(selectedDate),

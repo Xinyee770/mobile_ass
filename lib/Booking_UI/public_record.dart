@@ -12,28 +12,64 @@ class PublicRecord extends StatefulWidget {
 
 class _PublicRecordState extends State<PublicRecord> {
   final supabase = Supabase.instance.client;
-  String activeFilter = "ALL";
 
-  // Helper to format time strings (HH:mm:ss -> HH:mm)
+  // Filters
+  String activeFilter = "ALL";
+  final List<String> _filters = ["ALL", "CONFIRMED", "CANCELLED"];
+
+  // --- NEW: Sorting State ---
+  String _selectedSort = "Nearest Day";
+  final List<String> _sortOptions = ["Nearest Day", "Time", "Instructor (A-Z)", "Location"];
+
+  final Color brandPurple = const Color(0xFF9D59FF);
+  final Color textGrey = Colors.white30;
+
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return "-";
     try {
-      // Takes '14:30:00' and returns '14:30'
       return time.substring(0, 5);
     } catch (e) {
       return time;
     }
   }
 
+  // --- NEW: Sorting Logic ---
+  void _sortBookings(List<dynamic> list) {
+    switch (_selectedSort) {
+      case "Nearest Day":
+        list.sort((a, b) => (a['booking_date'] ?? "").compareTo(b['booking_date'] ?? ""));
+        break;
+      case "Time":
+        list.sort((a, b) => (a['start_time'] ?? "").compareTo(b['start_time'] ?? ""));
+        break;
+      case "Instructor (A-Z)":
+        list.sort((a, b) {
+          String nameA = a['instructor']?['instructor_name'] ?? "ZZZ";
+          String nameB = b['instructor']?['instructor_name'] ?? "ZZZ";
+          return nameA.toLowerCase().compareTo(nameB.toLowerCase());
+        });
+        break;
+      case "Location":
+        list.sort((a, b) => (a['location'] ?? "").compareTo(b['location'] ?? ""));
+        break;
+    }
+  }
+
   Future<List<dynamic>> _fetchPublicBookings() async {
     try {
+      // 1. Get the current authenticated user
+      final user = supabase.auth.currentUser;
+      if (user == null) return [];
+
+      // 2. Add the .eq filter to target ONLY this user's records
       final response = await supabase
           .from('booking')
           .select('''
-            *,
-            courses(course_name),
-            instructor(instructor_name, is_private)
-          ''')
+          *,
+          courses(course_name),
+          instructor(instructor_name, is_private)
+        ''')
+          .eq('user_id', user.id) // <--- CRITICAL CHANGE
           .order('booking_date', ascending: false);
 
       final allBookings = (response as List).where((booking) {
@@ -41,8 +77,14 @@ class _PublicRecordState extends State<PublicRecord> {
         return inst != null && (inst['is_private'] == false || inst['is_private'] == null);
       }).toList();
 
-      if (activeFilter == "ALL") return allBookings;
-      return allBookings.where((b) => b['booking_status'].toString().toUpperCase() == activeFilter).toList();
+      List<dynamic> filtered = activeFilter == "ALL"
+          ? allBookings
+          : allBookings.where((b) => b['booking_status'].toString().toUpperCase() == activeFilter).toList();
+
+      // Apply the selected sorting
+      _sortBookings(filtered);
+
+      return filtered;
     } catch (e) {
       debugPrint("Fetch error: $e");
       return [];
@@ -62,6 +104,7 @@ class _PublicRecordState extends State<PublicRecord> {
       body: Column(
         children: [
           _buildFilterBar(),
+          _buildSortSection(), // --- NEW SORT UI ---
           Expanded(
             child: FutureBuilder<List<dynamic>>(
               future: _fetchPublicBookings(),
@@ -86,12 +129,58 @@ class _PublicRecordState extends State<PublicRecord> {
     );
   }
 
+  // --- NEW: Sort UI Section ---
+  Widget _buildSortSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      alignment: Alignment.centerLeft,
+      child: Row(
+        children: [
+          Icon(Icons.sort, color: brandPurple, size: 18),
+          const SizedBox(width: 8),
+          const Text("Sort by:", style: TextStyle(color: Colors.white30, fontSize: 13)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _sortOptions.map((option) {
+                  bool isSelected = _selectedSort == option;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedSort = option),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isSelected ? brandPurple : Colors.white10),
+                        borderRadius: BorderRadius.circular(12),
+                        color: isSelected ? brandPurple.withOpacity(0.1) : Colors.transparent,
+                      ),
+                      child: Text(
+                        option,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white30,
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFilterBar() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
-        children: ["ALL", "CONFIRMED", "CANCELLED"].map((status) {
+        children: _filters.map((status) {
           bool isActive = activeFilter == status;
           return Padding(
             padding: const EdgeInsets.only(right: 10),
@@ -114,7 +203,6 @@ class _PublicRecordState extends State<PublicRecord> {
     final String status = (booking['booking_status'] ?? "Confirmed").toString();
     final bool isCancelled = status.toLowerCase() == 'cancelled';
 
-    // Format Times using the helper
     String startTime = _formatTime(booking['start_time']);
     String endTime = _formatTime(booking['end_time']);
 
@@ -161,22 +249,14 @@ class _PublicRecordState extends State<PublicRecord> {
           Text(booking['courses']?['course_name'] ?? "Public Class",
               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
-
-          // DATE ROW
           _iconDetail(Icons.calendar_today_outlined, booking['booking_date'] ?? ""),
           const SizedBox(height: 10),
-
-          // TIME ROW (Formatted and under the Date)
           _iconDetail(Icons.access_time, "$startTime - $endTime"),
           const SizedBox(height: 10),
-
-          // LOCATION ROW
           _iconDetail(Icons.location_on_outlined, booking['location'] ?? "Main Studio"),
-
           const SizedBox(height: 20),
           const Divider(color: Colors.white10),
           const SizedBox(height: 10),
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

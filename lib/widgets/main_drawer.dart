@@ -4,6 +4,7 @@ import '../Booking_UI/booking.dart';
 import '../Booking_UI/booking_record.dart';
 import '../Booking_UI/public_booking.dart';
 import '../Booking_UI/public_record.dart';
+import '../Booking_UI/timetable.dart';
 import '../Payment_UI/wallet_topup.dart';
 import '../Payment_UI/FinancialHub_Page.dart';
 
@@ -45,6 +46,7 @@ class MainDrawer extends StatelessWidget {
                 _tile(Icons.person_outline, 'User Profile', destination: 'profile'),
                 _tile(Icons.add_card_outlined, 'Top Up Wallet', destination: 'topup'),
                 _tile(Icons.account_balance_wallet_outlined, 'My Transactions', destination: 'finance'),
+                _tile(Icons.calendar_view_day_outlined, 'My Timetable', destination: 'timetable'),
 
                 // We keep your exact ExpansionTiles here
                 _buildExpansionSection(
@@ -207,6 +209,7 @@ class MainDrawer extends StatelessWidget {
       case 'public_booking': return const PublicBooking();
       case 'record': return const BookingRecord();
       case 'public_record': return const PublicRecord();
+      case 'timetable': return const TimetablePage();
       default: return const SizedBox();
     }
   }
