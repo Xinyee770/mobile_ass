@@ -18,6 +18,10 @@ class _PublicBookingPageState extends State<PublicBooking> {
   Map<String, dynamic>? selectedCourseData;
   bool isLoading = true;
 
+  // --- NEW: Track pax counts for the selected class ---
+  int currentPaxCount = 0;
+  bool isCheckingCapacity = false;
+
   final List<Map<String, dynamic>> studios = [
     {'id': 'A', 'name': 'Studio A (Setapak)', 'address': '38-06, Vista Danau Kota, KL'},
     {'id': 'B', 'name': 'Studio B (Bentong)', 'address': 'No.33 Taman Orkid, Bentong'},
@@ -47,7 +51,34 @@ class _PublicBookingPageState extends State<PublicBooking> {
     }
   }
 
-  // --- UPDATED: Confirmation Popup with Date & Time ---
+  // --- NEW: Check how many people have booked this specific class ---
+  Future<void> _checkClassCapacity(dynamic courseId, String courseDate) async {
+    setState(() {
+      isCheckingCapacity = true;
+      currentPaxCount = 0; // reset
+    });
+
+    try {
+      // Query the booking table for this specific class and date
+      // We exclude Cancelled status so they don't count towards capacity
+      final countResponse = await supabase
+          .from('booking')
+          .select('booking_id')
+          .eq('course_id', courseId)
+          .eq('booking_date', courseDate)
+          .neq('booking_status', 'Cancelled');
+
+      setState(() {
+        currentPaxCount = (countResponse as List).length;
+        isCheckingCapacity = false;
+      });
+    } catch (e) {
+      debugPrint("Error checking capacity: $e");
+      setState(() => isCheckingCapacity = false);
+    }
+  }
+
+  // --- Confirmation Popup with Date & Time ---
   void _confirmJoin() {
     String displayDate = "-";
     if (selectedCourseData!['date'] != null) {
@@ -113,7 +144,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
   // --- Actual Booking Logic ---
   Future<void> _executeBooking() async {
     try {
-
       final user = supabase.auth.currentUser;
       if (user == null) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -133,35 +163,33 @@ class _PublicBookingPageState extends State<PublicBooking> {
         'booking_date': courseDate,
         'start_time': startTime,
         'end_time': endTime,
+        'location': selectedCourseData!['location'] ?? 'Main Studio', // Don't forget location!
         'booking_status': 'Confirmed',
       }).select();
 
-      if (response != null && (response as List).isNotEmpty) {
-
-        // --- ADDED NOTIFICATION SCHEDULING ---
+      if (response.isNotEmpty) {
+        // --- NOTIFICATION SCHEDULING ---
         try {
           final dateParts = courseDate.split('-');
           final timeParts = startTime.split(':');
 
           final classDateTime = DateTime(
-            int.parse(dateParts[0]), // year
-            int.parse(dateParts[1]), // month
-            int.parse(dateParts[2]), // day
-            int.parse(timeParts[0]), // hour
-            int.parse(timeParts[1]), // minute
+            int.parse(dateParts[0]),
+            int.parse(dateParts[1]),
+            int.parse(dateParts[2]),
+            int.parse(timeParts[0]),
+            int.parse(timeParts[1]),
           );
 
           await NotificationService().scheduleTaskReminder(
             bookingId: response[0]['booking_id'].toString(),
             taskTitle: "Public Class: ${selectedCourseData!['course_name']}",
             taskDateTime: classDateTime,
-            minutesBefore: 5, // Set to 5 minutes
+            minutesBefore: 5,
           );
-          debugPrint("🔔 Public class reminder scheduled.");
         } catch (e) {
           debugPrint("⚠️ Notification failed: $e");
         }
-        // ------------------------------------
 
         if (!mounted) return;
         Navigator.push(context, MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])));
@@ -193,6 +221,14 @@ class _PublicBookingPageState extends State<PublicBooking> {
   @override
   Widget build(BuildContext context) {
     const accentColor = Color(0xFF9D59FF);
+
+    // --- Determine logic for the Join Button ---
+    int maxCapacity = int.tryParse(selectedCourseData?['capacity']?.toString() ?? '20') ?? 20;
+    bool isFull = currentPaxCount >= maxCapacity;
+
+    // The button is disabled if NO course is selected, OR if the capacity is checking, OR if it's full.
+    bool canBook = selectedCourseId != null && !isCheckingCapacity && !isFull;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F16),
       appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, title: const Text("Join a Class", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
@@ -214,9 +250,22 @@ class _PublicBookingPageState extends State<PublicBooking> {
             SizedBox(
               width: double.infinity, height: 56,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: accentColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                onPressed: selectedCourseId == null ? null : _confirmJoin,
-                child: const Text("JOIN CLASS", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                style: ElevatedButton.styleFrom(
+                  // Turn button grey/red if full
+                    backgroundColor: canBook ? accentColor : const Color(0xFF2A2A3A),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                ),
+                onPressed: canBook ? _confirmJoin : null,
+                child: isCheckingCapacity
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                    isFull ? "CLASS FULL" : "JOIN CLASS",
+                    style: TextStyle(
+                        color: canBook ? Colors.white : Colors.white30,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16
+                    )
+                ),
               ),
             ),
           ],
@@ -234,6 +283,8 @@ class _PublicBookingPageState extends State<PublicBooking> {
     String endTime = selectedCourseData!['course_end']?.toString().substring(0, 5) ?? "-";
     String price = selectedCourseData!['course_price']?.toString() ?? "0.00";
     String studioName = selectedCourseData!['location'] ?? "Main Studio";
+
+    int maxCapacity = int.tryParse(selectedCourseData!['capacity']?.toString() ?? '20') ?? 20;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -256,7 +307,34 @@ class _PublicBookingPageState extends State<PublicBooking> {
             child: Row(children: [Expanded(child: _infoRow(Icons.location_on_outlined, "Location", studioName)), const Icon(Icons.info_outline, color: Colors.white24, size: 16)]),
           ),
           const SizedBox(height: 16),
-          _infoRow(Icons.group_outlined, "Capacity", "${selectedCourseData!['capacity'] ?? '0'} Participants"),
+
+          // --- NEW: Visual Pax Counter ---
+          const Divider(color: Colors.white10),
+          const SizedBox(height: 10),
+          Row(
+              children: [
+                Icon(Icons.group_outlined, color: currentPaxCount >= maxCapacity ? Colors.redAccent : const Color(0xFF9D59FF), size: 20),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Availability", style: TextStyle(color: Colors.white30, fontSize: 11)),
+                        const SizedBox(height: 4),
+                        isCheckingCapacity
+                            ? const Text("Checking slots...", style: TextStyle(color: Colors.white54, fontSize: 13, fontStyle: FontStyle.italic))
+                            : Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("$currentPaxCount / $maxCapacity Booked", style: TextStyle(color: currentPaxCount >= maxCapacity ? Colors.redAccent : Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                            Text(currentPaxCount >= maxCapacity ? "Full" : "${maxCapacity - currentPaxCount} slots left", style: TextStyle(color: currentPaxCount >= maxCapacity ? Colors.redAccent : const Color(0xFF57C5B6), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ]
+                  ),
+                ),
+              ]
+          )
         ],
       ),
     );
@@ -274,10 +352,17 @@ class _PublicBookingPageState extends State<PublicBooking> {
           isExpanded: true,
           icon: Icon(Icons.keyboard_arrow_down, color: accentColor),
           items: publicCourses.map((c) => DropdownMenuItem(value: c['course_id'], child: Text(c['course_name'] ?? "", style: const TextStyle(color: Colors.white, fontSize: 15)))).toList(),
-          onChanged: (val) => setState(() {
-            selectedCourseId = val;
-            selectedCourseData = publicCourses.firstWhere((c) => c['course_id'] == val);
-          }),
+          onChanged: (val) {
+            setState(() {
+              selectedCourseId = val;
+              selectedCourseData = publicCourses.firstWhere((c) => c['course_id'] == val);
+            });
+            // --- TRIGGER THE CAPACITY CHECK WHEN SELECTED ---
+            if (selectedCourseData != null) {
+              String classDate = selectedCourseData!['date'] ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
+              _checkClassCapacity(val, classDate);
+            }
+          },
         ),
       ),
     );
