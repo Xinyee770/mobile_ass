@@ -142,14 +142,22 @@ class _BookingUpdateState extends State<BookingUpdate> {
 
   Future<void> _handleUpdate() async {
     try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
       await supabase.from('booking').update({
         'booking_date': DateFormat('yyyy-MM-dd').format(_selectedDate),
         'start_time': _selectedStart,
         'end_time': _selectedEnd,
         'location': _selectedLocation,
-      }).eq('booking_id', widget.booking['booking_id']);
+        'user_id': user.id, // Optional: keeps the UUID link explicit
+      }).eq('booking_id', widget.booking['booking_id'])
+          .eq('user_id', supabase.auth.currentUser?.id ?? ""); // Security: ensures a user can only update THEIR booking
+
       if (mounted) Navigator.pop(context);
-    } catch (e) { debugPrint("Update Error: $e"); }
+    } catch (e) {
+      debugPrint("Update Error: $e");
+    }
   }
 
   @override

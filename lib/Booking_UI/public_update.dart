@@ -58,16 +58,22 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
     if (confirm == true) {
       try {
+        // 1. Get the current user
+        final user = supabase.auth.currentUser;
+        if (user == null) return;
+
+        // 2. Update with double-verification (ID + User)
         await supabase
             .from('booking')
             .update({'booking_status': 'Cancelled'})
-            .eq('booking_id', widget.booking['booking_id']);
+            .eq('booking_id', widget.booking['booking_id'])
+            .eq('user_id', user.id); // <--- ADD THIS SECURITY CHECK
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Booking Cancelled"), backgroundColor: Colors.orange),
           );
-          Navigator.pop(context); // Go back to the history list
+          Navigator.pop(context);
         }
       } catch (e) {
         debugPrint("Cancel Error: $e");
