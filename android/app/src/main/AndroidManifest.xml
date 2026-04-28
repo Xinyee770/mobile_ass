@@ -11,6 +11,7 @@
         android:label="mobile_ass"
         android:name="android.app.Application"
         android:icon="@mipmap/ic_launcher">
+        android:usesCleartextTraffic="true"
 
         <activity
             android:name=".MainActivity"

@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:mobile_ass/Booking_UI/booking.dart';
+import 'package:mobile_ass/Booking_UI/public_booking.dart';
+import 'package:mobile_ass/Payment_UI/wallet_topup.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../Profile_UI/profile.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
-import '../Booking_UI/booking.dart';
-import '../Booking_UI/public_booking.dart';
-import '../Payment_UI/wallet_topup.dart';
 
 class DashboardView extends StatefulWidget {
   final ColorScheme theme;
-  final Map<String, dynamic>? weatherData;
+  final dynamic weatherData;
+  final String avatarUrl;
+  final int passes;
   final bool isLoading;
   final String userName;
   final Function(Widget) onNavigate;
@@ -18,6 +22,8 @@ class DashboardView extends StatefulWidget {
     super.key,
     required this.theme,
     required this.userName,
+    required this.passes,
+    required this.avatarUrl,
     required this.onNavigate,
     this.weatherData,
     this.isLoading = false,
@@ -148,6 +154,9 @@ class _DashboardViewState extends State<DashboardView> {
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeInOutQuart,
         );
+
+        // This forces the UI to re-check the clock for the weather banner every 4 seconds
+        if (mounted) setState(() {});
       }
     });
   }
@@ -214,38 +223,239 @@ class _DashboardViewState extends State<DashboardView> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _buildWeatherBanner(),
+    return RefreshIndicator(
+      color: widget.theme.primary,
+      backgroundColor: const Color(0xFF1E1E2C),
+      onRefresh: () async {
+        // Refresh your data here
+        await _fetchNextBooking();
+        await Future.delayed(const Duration(seconds: 1));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        children: [
+          // --- HEADER SECTION ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => widget.onNavigate(const Profile()),
+                  child: CircleAvatar(
+                    radius: 26,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage: widget.avatarUrl.isNotEmpty
+                        ? NetworkImage(widget.avatarUrl)
+                        : null,
+                    child: widget.avatarUrl.isEmpty
+                        ? const Icon(Icons.person, color: Colors.white)
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Welcome Back,",
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                      Text(
+                        widget.userName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // PASSES CHIP
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: widget.theme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: widget.theme.primary.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.confirmation_number_rounded, size: 14, color: widget.theme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        "${widget.passes} Passes",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // 1. Weather Banner
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _buildWeatherBanner(),
+          ),
+
+          const SizedBox(height: 30),
+
+          // 2. Quick Access
+          _buildQuickAccess(),
+
+          const SizedBox(height: 35),
+
+          // 3. Upcoming Classes (Friend's Timer Logic)
+          _buildSectionTitle("Upcoming Classes"),
+          const SizedBox(height: 15),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _buildUpcomingBox(), // Corrected to friend's function name
+          ),
+
+          const SizedBox(height: 35),
+
+          // 4. Carousel
+          _buildSectionTitle("Explore Dance Courses"),
+          const SizedBox(height: 15),
+          _buildCarousel(),
+          const SizedBox(height: 10),
+          _buildDotIndicators(),
+
+          const SizedBox(height: 40),
+
+          // 5. Studio Locator (Friend's Map Logic)
+          _buildSectionTitle("Our Studios"),
+          const SizedBox(height: 15),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: _buildInteractiveMapWithDetails(), // Corrected to friend's function name
+          ),
+
+          const SizedBox(height: 50),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickAccess() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // 1. PUBLIC CLASS
+          _buildActionItem(
+            Icons.groups_rounded,
+            "Public",
+            Colors.purpleAccent,
+                () => widget.onNavigate(const PublicBooking()), // Direct Link
+          ),
+
+          // 2. PRIVATE CLASS
+          _buildActionItem(
+            Icons.person_add_rounded,
+            "Private",
+            Colors.blueAccent,
+                () => widget.onNavigate(const BookingPage()), // Direct Link
+          ),
+
+          // 3. WALLET TOP UP
+          _buildActionItem(
+            Icons.account_balance_wallet_rounded,
+            "Top-Up",
+            Colors.orangeAccent,
+                () => widget.onNavigate(const WalletTopUp()), // Direct Link
+          ),
+
+          // 4. CHECK-IN (Placeholder - adjust if you have a QR page)
+          _buildActionItem(
+            Icons.qr_code_scanner_rounded,
+            "Check-in",
+            Colors.greenAccent,
+                () => _showCheckInQR(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCheckInQR(BuildContext context) {
+    // We grab the ID from Supabase directly
+    final userId = Supabase.instance.client.auth.currentUser?.id ?? "No ID";
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E2C),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Scan to Check-in", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: QrImageView(data: userId, size: 200), // Uses the same QR library
+            ),
+            const SizedBox(height: 20),
+            Text("ID: $userId", style: const TextStyle(color: Colors.white24, fontSize: 10)),
+          ],
         ),
-        const SizedBox(height: 30),
-        _buildQuickAccess(),
-        const SizedBox(height: 35),
-        _buildSectionTitle("Upcoming Classes"),
-        const SizedBox(height: 15),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: _buildUpcomingBox(),
-        ),
-        const SizedBox(height: 35),
-        _buildSectionTitle("Explore Dance Courses"),
-        const SizedBox(height: 15),
-        _buildCarousel(),
-        const SizedBox(height: 10),
-        _buildDotIndicators(),
-        const SizedBox(height: 40),
-        _buildSectionTitle("Our Studio Location"),
-        const SizedBox(height: 15),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: _buildInteractiveMapWithDetails(),
-        ),
-        const SizedBox(height: 50),
-      ],
+      ),
+    );
+  }
+
+  // Update helper to accept an onTap function
+  Widget _buildActionItem(IconData icon, String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+              border: Border.all(color: color.withOpacity(0.2)),
+            ),
+            child: Icon(icon, color: color, size: 26),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Handy helper to keep code clean
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Text(
+        title,
+        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -394,38 +604,94 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   Widget _buildWeatherBanner() {
-    if (widget.isLoading) return const SizedBox(height: 110);
-    String rawForecast = widget.weatherData?['morning_forecast'] ?? "Clear";
-    bool isRainy = rawForecast.contains("Hujan") || rawForecast.contains("Ribut");
-    bool isCloudy = rawForecast.contains("Berawan") || rawForecast.contains("Mendung");
+    if (widget.isLoading || widget.weatherData == null) {
+      return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+    }
 
+    // 1. Get today's date in YYYY-MM-DD format
+    // This produces "2026-04-28"
+    String todayDate = DateTime.now().toString().split(' ')[0];
+
+    dynamic todayData;
+
+    // 2. SCAN the list to find the item where 'date' matches '2026-04-28'
+    if (widget.weatherData is List) {
+      List<dynamic> weatherList = widget.weatherData;
+      todayData = weatherList.firstWhere(
+            (element) => element['date'] == todayDate,
+        orElse: () => weatherList[0], // Fallback to first item if not found
+      );
+    } else {
+      todayData = widget.weatherData;
+    }
+
+
+    int hour = DateTime.now().hour;
+    bool isNight = hour >= 18 || hour < 6;
+
+    // 3. Get the correct forecast slot
+    String rawForecast = "";
+    if (hour < 12) {
+      rawForecast = todayData['morning_forecast']?.toString().toLowerCase() ?? "";
+    } else if (hour < 18) {
+      rawForecast = todayData['afternoon_forecast']?.toString().toLowerCase() ?? "";
+    } else {
+      // Because we found 2026-04-28, this will now correctly be "ribut petir..."
+      rawForecast = todayData['night_forecast']?.toString().toLowerCase() ?? "";
+    }
+
+    // 4. Keyword check
+    bool isRainy = (rawForecast.contains("hujan") || rawForecast.contains("ribut"))
+        && !rawForecast.contains("tiada");
+    bool isCloudy = rawForecast.contains("berawan") || rawForecast.contains("mendung");
+
+    // 5. Pick UI elements
+    String displayTitle = isRainy ? "Stormy" : (isCloudy ? "Cloudy" : "Clear Skies");
+    String subtitleText = isRainy
+        ? "Lightning outside! Stay safe."
+        : (isNight ? "Great night for a late session!" : "Perfect day for practice!");
+
+    // Background logic
     String bgUrl = isRainy
-        ? "https://img.freepik.com/premium-photo/cartoon-illustration-stormy-sky-with-lightning-rain_14117-1146245.jpg"
+        ? (isNight
+        ? "https://cdn.suwalls.com/wallpapers/fantasy/rainy-city-at-night-16438-1920x1080.jpg"
+        : "https://images.stockcake.com/public/6/5/8/658984ea-3367-44a5-9525-4d0abdfec6a6_large/rainy-pixel-city-stockcake.jpg")
+        : (isNight
+        ? "https://wallpapers.com/images/hd/pastel-sky-on-a-beautiful-night-i9neq2ed7blcu74r.jpg"
         : (isCloudy
-        ? "https://img.freepik.com/premium-vector/cute-cartoon-cloud-background-with-heart-shape-blue-sky_1199668-2244.jpg"
-        : "https://static.vecteezy.com/system/resources/thumbnails/062/844/026/small/cute-bright-blue-cloud-in-the-sky-bottom-border-seamless-pattern-background-vector.jpg");
+        ? "https://img.freepik.com/free-vector/modern-cloudy-skyscape-background-with-papercut-effect_1017-50492.jpg"
+        : "https://static.vecteezy.com/system/resources/thumbnails/062/844/026/small/cute-bright-blue-cloud-in-the-sky-bottom-border-seamless-pattern-background-vector.jpg"));
 
     return Container(
-      width: double.infinity, height: 110,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20)),
+      width: double.infinity,
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Stack(
           children: [
             Positioned.fill(child: Image.network(bgUrl, fit: BoxFit.cover)),
+            Positioned.fill(child: Container(color: Colors.black.withOpacity(isNight ? 0.4 : 0.1))),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 25),
               child: Row(
                 children: [
-                  Icon(isRainy ? Icons.thunderstorm_rounded : (isCloudy ? Icons.cloud_rounded : Icons.wb_sunny_rounded), color: Colors.white, size: 32),
-                  const SizedBox(width: 15),
+                  Icon(
+                    isRainy ? Icons.thunderstorm_rounded : (isNight ? Icons.nights_stay_rounded : Icons.wb_sunny_rounded),
+                    color: Colors.white,
+                    size: 40,
+                    shadows: const [Shadow(blurRadius: 15, color: Colors.black)],
+                  ),
+                  const SizedBox(width: 20),
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("It's ${isRainy ? 'Rainy' : (isCloudy ? 'Cloudy' : 'Clear')} • KL",
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                      const Text("Perfect for studio practice!", style: TextStyle(color: Colors.white, fontSize: 12)),
+                      Text("It's $displayTitle • KL", style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, shadows: [Shadow(blurRadius: 10, color: Colors.black)])),
+                      Text(subtitleText, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500, shadows: [Shadow(blurRadius: 10, color: Colors.black)])),
                     ],
                   ),
                 ],
@@ -437,48 +703,9 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  Widget _buildQuickAccess() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _buildActionItem(Icons.groups_rounded, "Public", Colors.purpleAccent, () => widget.onNavigate(const PublicBooking())),
-          _buildActionItem(Icons.person_add_rounded, "Private", Colors.blueAccent, () => widget.onNavigate(const BookingPage())),
-          _buildActionItem(Icons.account_balance_wallet_rounded, "Top-Up", Colors.orangeAccent, () => widget.onNavigate(const WalletTopUp())),
-          _buildActionItem(Icons.qr_code_scanner_rounded, "Check-in", Colors.greenAccent, () => debugPrint("Open QR")),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionItem(IconData icon, String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle, border: Border.all(color: color.withOpacity(0.2))),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(height: 10),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-    );
-  }
-
   Widget _buildCarousel() {
     return SizedBox(
-      height: 180,
+      height: 180, // Slightly taller for more impact
       child: PageView.builder(
         controller: _pageController,
         onPageChanged: (int page) => setState(() => _currentPage = page),
@@ -491,21 +718,51 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _buildCarouselItem(Map<String, String> data) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(25)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(25),
         child: Stack(
           children: [
-            Positioned.fill(child: Image.network(data['url']!, fit: BoxFit.cover)),
-            Positioned.fill(child: Container(color: Colors.black38)),
+            Positioned.fill(
+              child: Image.network(data['url']!, fit: BoxFit.cover),
+            ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.85),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(data['title']!, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(data['desc']!, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                  Text(
+                    data['title']!,
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    data['desc']!,
+                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
+                  ),
                 ],
               ),
             ),
@@ -522,8 +779,12 @@ class _DashboardViewState extends State<DashboardView> {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.symmetric(horizontal: 4),
-          height: 6, width: _currentPage == index ? 20 : 6,
-          decoration: BoxDecoration(color: _currentPage == index ? widget.theme.primary : Colors.white24, borderRadius: BorderRadius.circular(3)),
+          height: 6,
+          width: _currentPage == index ? 20 : 6,
+          decoration: BoxDecoration(
+            color: _currentPage == index ? widget.theme.primary : Colors.white24,
+            borderRadius: BorderRadius.circular(3),
+          ),
         );
       }),
     );

@@ -548,17 +548,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
             ),
           ),
         ],
-
-        // 3. Optional: Helpful hint for the user
-        if (bookingStatus == 'attended') ...[
-          const SizedBox(height: 16),
-          const Center(
-            child: Text(
-              "Refund unavailable for attended classes.",
-              style: TextStyle(color: Colors.white38, fontSize: 12, fontStyle: FontStyle.italic),
-            ),
-          ),
-        ],
       ],
     );
   }
