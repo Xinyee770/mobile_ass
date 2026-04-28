@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Profile extends StatefulWidget {
@@ -240,7 +241,7 @@ class _ProfileState extends State<Profile> {
               ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
 
             // Personal Info Header
             sectionHeader("Personal Info"),
@@ -269,6 +270,27 @@ class _ProfileState extends State<Profile> {
               label: "Available Passes",
               value: passes.toString(),
             ),
+
+            sectionHeader("My QR Code"),
+
+            const SizedBox(height: 20),
+
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: userId,
+                  version: QrVersions.auto,
+                  size: 180.0,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 60),
           ],
         ),
       ),
