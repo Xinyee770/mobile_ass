@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import '../Authentication_UI/login.dart';
 
 class Admin extends StatefulWidget {
@@ -1188,18 +1189,52 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
   bool scanned = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // NEW: Automatically clean up old bookings when the admin opens the scanner
+    markMissedClasses();
+  }
+
+  // NEW: Logic for past classes
+  Future<void> markMissedClasses() async {
+    try {
+      final now = DateTime.now();
+      final currentDate = DateFormat('yyyy-MM-dd').format(now);
+      final currentTime = DateFormat('HH:mm:ss').format(now);
+
+      // Update to 'Missed' if date is in the past OR date is today but class ended
+      await supabase
+          .from('booking')
+          .update({'booking_status': 'Missed'})
+          .eq('booking_status', 'Confirmed')
+          .or('booking_date.lt.$currentDate,and(booking_date.eq.$currentDate,end_time.lt.$currentTime)');
+
+      debugPrint("Checked and updated missed classes.");
+    } catch (e) {
+      debugPrint("Error marking missed classes: $e");
+    }
+  }
+
   Future<void> saveAttendance(String qrValue) async {
     try {
       final userId = qrValue.trim();
+      final now = DateTime.now();
+      final currentTime = DateFormat('HH:mm:ss').format(now);
+      final currentDate = DateFormat('yyyy-MM-dd').format(now);
 
-      //Invalid QR
+      // NEW: Allows check-in up to 15 minutes before the start_time
+      final startTimeWithGrace = DateFormat('HH:mm:ss').format(
+          now.add(const Duration(minutes: 15))
+      );
+
       if (userId.isEmpty) {
         await showErrorDialog("Invalid QR Code", "QR code is empty.");
         setState(() => scanned = false);
         return;
       }
 
-      //Check user exist
+      // 1. Check if user exists
       final profile = await supabase
           .from('profiles')
           .select('name, email')
@@ -1212,19 +1247,30 @@ class _QRScannerPageState extends State<QRScannerPage> {
         return;
       }
 
-      //prevent duplicate check-in
+      // 2. UPDATED: Update Booking Status with Grace Period
+      final activeBooking = await supabase
+          .from('booking')
+          .update({'booking_status': 'Attended'})
+          .eq('user_id', userId)
+          .eq('booking_date', currentDate)
+          .lte('start_time', startTimeWithGrace) // Can scan 15 mins early
+          .gte('end_time', currentTime)          // Cannot scan after class ends
+          .select();
+
+      // 3. Prevent duplicate attendance records for the day
       final existing = await supabase
           .from('attendance')
           .select()
-          .eq('user_id', userId);
+          .eq('user_id', userId)
+          .eq('created_at', currentDate);
 
       if (existing.isNotEmpty) {
-        await showErrorDialog("Already Checked-in", "This user already checked in.");
+        await showErrorDialog("Already Checked-in", "This user already checked in today.");
         setState(() => scanned = false);
         return;
       }
 
-      //Insert attendance
+      // 4. Insert attendance record
       await supabase.from('attendance').insert({
         'user_id': userId,
         'status': 'Present',
@@ -1232,29 +1278,33 @@ class _QRScannerPageState extends State<QRScannerPage> {
 
       if (!mounted) return;
 
-      //SUCCESS POPUP
+      // SUCCESS POPUP
+      // Use the email field to show if a booking was actually found or just general attendance
+      String displayInfo = activeBooking.isNotEmpty
+          ? "${profile['email']}\n(Booking Marked Attended)"
+          : "${profile['email']}\n(General Attendance Only)";
+
       await showSuccessDialog(
         profile['name'] ?? 'Member',
-        profile['email'] ?? '',
+        displayInfo,
       );
 
     } catch (e) {
       if (!mounted) return;
-
       await showErrorDialog("Scan Error", e.toString());
       setState(() => scanned = false);
     }
   }
 
+  // --- YOUR DIALOGS AND BUTTONS BELOW (UNCHANGED) ---
+
   Future<void> showErrorDialog(String title, String message) async {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor:  Color(0xFF1E1E2C),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(title, style:  TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1264,10 +1314,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child:  Text("OK"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
         ],
       ),
     );
@@ -1278,33 +1325,24 @@ class _QRScannerPageState extends State<QRScannerPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF1E1E2C),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          "Check-in Successful",
-          style: TextStyle(color: Colors.white),
-        ),
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Check-in Successful", style: TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             Icon(Icons.check_circle, color: Colors.green, size: 70),
-             SizedBox(height: 12),
-            Text(name,
-                style:  TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-             SizedBox(height: 6),
-            Text(email, style:  TextStyle(color: Colors.grey)),
+            const Icon(Icons.check_circle, color: Colors.green, size: 70),
+            const SizedBox(height: 12),
+            Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text(email, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
           ],
         ),
         actions: [
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pop(context); // back to admin
+              setState(() => scanned = false);
             },
             child:  Text("Done"),
           ),
@@ -1316,35 +1354,19 @@ class _QRScannerPageState extends State<QRScannerPage> {
   Future<void> scanFromImage() async {
     try {
       final picker = ImagePicker();
-
-      final pickedImage = await picker.pickImage(
-        source: ImageSource.gallery,
-      );
-
+      final pickedImage = await picker.pickImage(source: ImageSource.gallery);
       if (pickedImage == null) return;
-
-      final barcodeCapture =
-      await scannerController.analyzeImage(pickedImage.path);
-
+      final barcodeCapture = await scannerController.analyzeImage(pickedImage.path);
       if (barcodeCapture == null || barcodeCapture.barcodes.isEmpty) {
         throw Exception("No QR code found in image");
       }
-
       final value = barcodeCapture.barcodes.first.rawValue;
-
-      if (value == null || value.isEmpty) {
-        throw Exception("QR code has no value");
-      }
-
+      if (value == null || value.isEmpty) throw Exception("QR code has no value");
       saveAttendance(value);
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Image scan failed: $e"),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text("Image scan failed: $e"), backgroundColor: Colors.red),
       );
     }
   }
@@ -1363,10 +1385,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
         backgroundColor:  Color(0xFF3B2F4F),
         title:  Text("Scan Attendance QR"),
         actions: [
-          IconButton(
-            icon:  Icon(Icons.image),
-            onPressed: scanFromImage,
-          ),
+          IconButton(icon: const Icon(Icons.image), onPressed: scanFromImage),
         ],
       ),
       body: Stack(
@@ -1375,17 +1394,14 @@ class _QRScannerPageState extends State<QRScannerPage> {
             controller: scannerController,
             onDetect: (capture) {
               if (scanned) return;
-
               final barcode = capture.barcodes.first;
               final value = barcode.rawValue;
-
               if (value != null) {
                 scanned = true;
                 saveAttendance(value);
               }
             },
           ),
-
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -1394,13 +1410,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFF9D59FF),
                   foregroundColor: Colors.white,
-                  padding:  EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 onPressed: scanFromImage,
                 icon:  Icon(Icons.image_search),

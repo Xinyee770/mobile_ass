@@ -13,11 +13,11 @@ class PublicRecord extends StatefulWidget {
 class _PublicRecordState extends State<PublicRecord> {
   final supabase = Supabase.instance.client;
 
-  // Filters
+  // Filters - Added ATTENDED and MISSED
   String activeFilter = "ALL";
-  final List<String> _filters = ["ALL", "CONFIRMED", "CANCELLED"];
+  final List<String> _filters = ["ALL", "CONFIRMED", "ATTENDED", "MISSED", "CANCELLED"];
 
-  // --- NEW: Sorting State ---
+  // Sorting State
   String _selectedSort = "Nearest Day";
   final List<String> _sortOptions = ["Nearest Day", "Time", "Instructor (A-Z)", "Location"];
 
@@ -33,7 +33,7 @@ class _PublicRecordState extends State<PublicRecord> {
     }
   }
 
-  // --- NEW: Sorting Logic ---
+  // Sorting Logic
   void _sortBookings(List<dynamic> list) {
     switch (_selectedSort) {
       case "Nearest Day":
@@ -57,11 +57,9 @@ class _PublicRecordState extends State<PublicRecord> {
 
   Future<List<dynamic>> _fetchPublicBookings() async {
     try {
-      // 1. Get the current authenticated user
       final user = supabase.auth.currentUser;
       if (user == null) return [];
 
-      // 2. Add the .eq filter to target ONLY this user's records
       final response = await supabase
           .from('booking')
           .select('''
@@ -69,7 +67,7 @@ class _PublicRecordState extends State<PublicRecord> {
           courses(course_name),
           instructor(instructor_name, is_private)
         ''')
-          .eq('user_id', user.id) // <--- CRITICAL CHANGE
+          .eq('user_id', user.id)
           .order('booking_date', ascending: false);
 
       final allBookings = (response as List).where((booking) {
@@ -81,7 +79,6 @@ class _PublicRecordState extends State<PublicRecord> {
           ? allBookings
           : allBookings.where((b) => b['booking_status'].toString().toUpperCase() == activeFilter).toList();
 
-      // Apply the selected sorting
       _sortBookings(filtered);
 
       return filtered;
@@ -104,7 +101,7 @@ class _PublicRecordState extends State<PublicRecord> {
       body: Column(
         children: [
           _buildFilterBar(),
-          _buildSortSection(), // --- NEW SORT UI ---
+          _buildSortSection(),
           Expanded(
             child: FutureBuilder<List<dynamic>>(
               future: _fetchPublicBookings(),
@@ -129,7 +126,6 @@ class _PublicRecordState extends State<PublicRecord> {
     );
   }
 
-  // --- NEW: Sort UI Section ---
   Widget _buildSortSection() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -200,8 +196,31 @@ class _PublicRecordState extends State<PublicRecord> {
   }
 
   Widget _buildClassCard(dynamic booking) {
-    final String status = (booking['booking_status'] ?? "Confirmed").toString();
-    final bool isCancelled = status.toLowerCase() == 'cancelled';
+    final String statusStr = (booking['booking_status'] ?? "Confirmed").toString().toUpperCase();
+
+    // Assigning colors based on the new statuses
+    Color statusBgColor;
+    Color statusTextColor;
+
+    switch (statusStr) {
+      case 'CANCELLED':
+        statusBgColor = const Color(0xFF3B1E1E);
+        statusTextColor = const Color(0xFFFF5959);
+        break;
+      case 'ATTENDED':
+        statusBgColor = const Color(0xFF1E2746); // Dark Blue
+        statusTextColor = const Color(0xFF598BFF); // Light Blue
+        break;
+      case 'MISSED':
+        statusBgColor = const Color(0xFF462E1E); // Dark Orange
+        statusTextColor = const Color(0xFFFFA059); // Orange
+        break;
+      case 'CONFIRMED':
+      default:
+        statusBgColor = const Color(0xFF1B2C2B); // Dark Green
+        statusTextColor = const Color(0xFF57C5B6); // Teal
+        break;
+    }
 
     String startTime = _formatTime(booking['start_time']);
     String endTime = _formatTime(booking['end_time']);
@@ -222,13 +241,13 @@ class _PublicRecordState extends State<PublicRecord> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isCancelled ? const Color(0xFF3B1E1E) : const Color(0xFF1B2C2B),
+                  color: statusBgColor,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  status.toUpperCase(),
+                  statusStr,
                   style: TextStyle(
-                      color: isCancelled ? const Color(0xFFFF5959) : const Color(0xFF57C5B6),
+                      color: statusTextColor,
                       fontSize: 10,
                       fontWeight: FontWeight.bold
                   ),

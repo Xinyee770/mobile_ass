@@ -14,7 +14,7 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
 
   // Filters
   String _selectedFilter = "All";
-  final List<String> _filters = ["All", "CONFIRMED", "CANCELLED", "ATTEND"];
+  final List<String> _filters = ["All", "CONFIRMED", "CANCELLED", "ATTEND", "MISSED"];
 
   // --- NEW: Sort Options ---
   String _selectedSort = "Nearest Day";
@@ -92,8 +92,20 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
 
   String _calculateStatus(dynamic booking) {
     String rawBookingStatus = (booking['booking_status'] ?? "").toString().toLowerCase();
+
     if (rawBookingStatus == 'cancelled') return "Cancelled";
     if (rawBookingStatus == 'attended' || rawBookingStatus == 'done') return "Attend";
+
+    // Logic for Missed: If not attended/cancelled and date is before today
+    DateTime bookingDate = DateTime.parse(booking['booking_date']);
+    DateTime today = DateTime.now();
+    // Clear time for date-only comparison
+    DateTime todayDate = DateTime(today.year, today.month, today.day);
+
+    if (bookingDate.isBefore(todayDate) && rawBookingStatus != 'attended') {
+      return "Missed";
+    }
+
     return "Confirmed";
   }
 
@@ -339,6 +351,10 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
         badgeBgColor = brandPurple.withOpacity(0.15);
         badgeTextColor = brandPurple;
         break;
+      case 'MISSED': // --- NEW CASE ---
+        badgeBgColor = const Color(0xFF422C1A); // Dark Amber/Brown
+        badgeTextColor = const Color(0xFFFFB74D); // Light Orange
+        break;
       default:
         badgeBgColor = const Color(0xFF2A2A35);
         badgeTextColor = textGrey;
@@ -346,7 +362,8 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(color: badgeBgColor, borderRadius: BorderRadius.circular(8)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: badgeTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Text(status.toUpperCase(),
+          style: TextStyle(color: badgeTextColor, fontSize: 10, fontWeight: FontWeight.bold)),
     );
   }
 }
