@@ -201,7 +201,7 @@ class _AdminState extends State<Admin> {
     required String? selectedLocation,
     required Function(String?) onChanged,
   }) {
-    final locations = ['Studio A', 'Studio B', 'Studio C'];
+    final locations = ['Studio A (Setapak)', 'Studio B (Bentong)', 'Studio C (KL)'];
 
     return Padding(
       padding:  EdgeInsets.only(bottom: 12),
@@ -595,7 +595,7 @@ class _AdminState extends State<Admin> {
 
     String? selectedLocation = course['location']?.toString();
 
-    if (!['Studio A', 'Studio B', 'Studio C'].contains(selectedLocation)) {
+    if (!['Studio A (Setapak)', 'Studio B (Bentong)', 'Studio C (KL)'].contains(selectedLocation)) {
       selectedLocation = null;
     }
 
