@@ -25,7 +25,11 @@ class _BookingUpdateState extends State<BookingUpdate> {
   String? _selectedLocation;
   bool isCancelled = false;
 
-  final List<String> _times = ['09:00:00', '10:00:00', '11:00:00', '13:00:00', '14:00:00', '15:00:00', '16:00:00', '17:00:00'];
+  final List<String> _times = [
+    '09:00:00', '10:00:00', '11:00:00',
+    '13:00:00', '14:00:00', '15:00:00',
+    '16:00:00', '17:00:00'
+  ];
 
   @override
   void initState() {

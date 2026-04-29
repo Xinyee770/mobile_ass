@@ -7,7 +7,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../Profile_UI/profile.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:intl/intl.dart';
 
 class DashboardView extends StatefulWidget {
   final ColorScheme theme;
@@ -75,7 +74,7 @@ class _DashboardViewState extends State<DashboardView> {
     _startAutoSlider();
     _fetchNextBooking();
 
-    // Auto-refresh data every 5 seconds to instantly catch new bookings or cancellations
+    // Auto-refresh data every 5 seconds
     _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _fetchNextBooking();
     });
@@ -90,13 +89,11 @@ class _DashboardViewState extends State<DashboardView> {
     super.dispose();
   }
 
-  // --- LOGIC: Fetch Next Class from Supabase ---
   Future<void> _fetchNextBooking() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     try {
-      // Get ALL active bookings
       final response = await Supabase.instance.client
           .from('booking')
           .select('*, courses(course_name)')
@@ -145,7 +142,7 @@ class _DashboardViewState extends State<DashboardView> {
     }
   }
 
-  // --- LOGIC: Timer Ticker ---
+  // Timer Ticker ---
   void _startCountdown() {
     _countdownTimer?.cancel(); // Cancel existing timer
 

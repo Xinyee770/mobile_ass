@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'Authentication_UI/login.dart';
 import 'package:local_auth/local_auth.dart';
 import 'utils/ui_helpers.dart';
-import 'Admin_UI/admin.dart';
 import 'widgets/main_drawer.dart';
 import 'widgets/dashboard_view.dart';
 import 'services/wallet_service.dart';
@@ -16,7 +15,6 @@ class Home extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- BRAND COLORS FROM YOUR DESIGN ---
     const Color brandPurple = Color(0xFF9D59FF); // Electric Purple
     const Color bgDeep = Color(0xFF0F0F16);      // Deep dark background
     const Color cardGrey = Color(0xFF1E1E2C);    // Charcoal surface color
@@ -26,7 +24,6 @@ class Home extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        // Using a dark brightness and our brand purple as the seed
         colorScheme: ColorScheme.fromSeed(
           seedColor: brandPurple,
           primary: brandPurple,
@@ -63,9 +60,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final WalletService _walletService = WalletService();
   final LocalAuthentication auth = LocalAuthentication();
   double walletBalance = 0.00;
-  bool _isBalanceHidden = true; // Default to hidden for privacy
+  bool _isBalanceHidden = true;
   int passes =0;
-  String userName = "User"; // Default name = user if no user login
+  String userName = "User";
   String avatarUrl = "";
   dynamic _malaysiaWeather;
   bool _isLoadingWeather = true;
@@ -87,7 +84,6 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
-    // If hidden, use your standard authentication logic
     try {
       bool canCheck = await auth.canCheckBiometrics;
       bool isSupported = await auth.isDeviceSupported();
@@ -95,7 +91,6 @@ class _MyHomePageState extends State<MyHomePage> {
       if (canCheck || isSupported) {
         bool didAuth = await auth.authenticate(
           localizedReason: 'Please authenticate to reveal your wallet balance',
-          // Following your pattern: biometricOnly: false allows PIN/Pattern backup
           biometricOnly: false,
           persistAcrossBackgrounding: true,
         );
@@ -104,7 +99,6 @@ class _MyHomePageState extends State<MyHomePage> {
           setState(() => _isBalanceHidden = false);
         }
       } else {
-        // If device doesn't support biometrics, just reveal it
         setState(() => _isBalanceHidden = false);
       }
     } catch (e) {
@@ -130,7 +124,6 @@ class _MyHomePageState extends State<MyHomePage> {
     if (user == null) return;
 
     try {
-      // This goes to the 'profiles' table in Supabase
       final data = await supabase
           .from('profiles')
           .select()
@@ -139,13 +132,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
       if (mounted) {
         setState(() {
-          // This saves the data into the variables so the Dashboard can see them
           userName = data['name'] ?? "User";
           avatarUrl = data['avatar_url'] ?? "";
           passes = data['passes'] ?? 0;
         });
 
-        // Save to phone memory so it's fast next time
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('cached_name', userName);
         await prefs.setString('cached_avatar', avatarUrl);
@@ -156,7 +147,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Logout confirmation popout
   Future<void> _confirmLogout() async {
     final supabase = Supabase.instance.client;
 
@@ -239,10 +229,10 @@ class _MyHomePageState extends State<MyHomePage> {
         onTogglePrivacy: _toggleBalancePrivacy,
         onLogout: _confirmLogout,
         onNavigate: (Widget page) async {
-          Navigator.pop(context); // Close the drawer
+          Navigator.pop(context);
           await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
-          _loadWallet(); // Refresh wallet if they top up
-          _loadUserProfile(); // Refresh avatar after returning
+          _loadWallet();
+          _loadUserProfile();
         },
       ),
       body: DashboardView(
@@ -250,26 +240,22 @@ class _MyHomePageState extends State<MyHomePage> {
         userName: userName,
         avatarUrl: avatarUrl,
         passes: passes,
-        weatherData: _malaysiaWeather, // PASS THE DATA
-        isLoading: _isLoadingWeather,  // PASS THE LOADING STATE
+        weatherData: _malaysiaWeather,
+        isLoading: _isLoadingWeather,
         onNavigate: _handleNavigation,
       ),
     );
   }
-// Add this method inside _MyHomePageState
   void _handleNavigation(Widget page) async {
-    // If the drawer is open, close it first
     if (Navigator.canPop(context)) {
       Navigator.pop(context);
     }
 
-    // Push the new page
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => page),
     );
 
-    // Refresh wallet balance when returning (in case they topped up)
     _loadWallet();
   }
 
@@ -278,9 +264,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        // It looks for 'cached_name', if not found, it stays as "User"
         userName = prefs.getString('cached_name') ?? "User";
-        // It looks for 'cached_balance', if not found, it stays 0.0
         walletBalance = prefs.getDouble('cached_balance') ?? 0.00;
       });
     }

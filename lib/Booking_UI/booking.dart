@@ -23,8 +23,9 @@ class _BookingPageState extends State<BookingPage> {
   ];
 
   final List<String> _allTimeSlots = [
-    '17:00:00', '18:00:00', '19:00:00', '20:00:00',
-    '21:00:00', '21:20:00', '21:30:00', '22:00:00'
+    '09:00:00', '10:00:00', '11:00:00', '12:00:00',
+    '13:00:00', '14:00:00', '15:00:00', '16:00:00',
+    '17:00:00'
   ];
 
   List<Map<String, dynamic>> coursesWithInstructors = [];
@@ -138,7 +139,6 @@ class _BookingPageState extends State<BookingPage> {
       final studio = studios.firstWhere((s) => s['id'] == selectedStudioId);
       final course = coursesWithInstructors.firstWhere((c) => c['course_id'] == selectedCourseId);
 
-      // 1. SAVE TO SUPABASE
       final response = await supabase.from('booking').insert({
         'user_id': user.id,
         'course_id': selectedCourseId,
@@ -147,11 +147,10 @@ class _BookingPageState extends State<BookingPage> {
         'start_time': _selectedTime,
         'end_time': endTime,
         'location': studio['name'],
-        'booking_status': 'Confirmed', // UPDATED STATUS
+        'booking_status': 'Confirmed',
       }).select();
 
       if (response.isNotEmpty) {
-        // 2. SCHEDULE NOTIFICATION: 30 MINUTES BEFORE
         try {
           String datePart = DateFormat('yyyy-MM-dd').format(selectedDate);
           DateTime classStart = DateTime.parse("$datePart $_selectedTime");
@@ -160,7 +159,7 @@ class _BookingPageState extends State<BookingPage> {
             bookingId: response[0]['booking_id'].toString(),
             taskTitle: "Private Class: ${course['course_name']}",
             taskDateTime: classStart,
-            minutesBefore: 1, // UPDATED FROM 5 TO 30
+            minutesBefore: 1, // notification
           );
         } catch (e) {
           debugPrint("Notification Error: $e");

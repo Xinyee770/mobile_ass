@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'Authentication_UI/login.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/notification_service.dart';
-import 'home.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

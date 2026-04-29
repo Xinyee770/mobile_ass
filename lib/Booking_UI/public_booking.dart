@@ -226,7 +226,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
     );
   }
 
-  // --- JOIN VIA PAYMENT ---
   Future<void> _executeBooking() async {
     try {
       final user = supabase.auth.currentUser;
@@ -267,7 +266,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
     }
   }
 
-  // --- JOIN VIA PASS ---
   Future<void> _executeBookingWithPass() async {
     try {
       final user = supabase.auth.currentUser;
@@ -290,14 +288,13 @@ class _PublicBookingPageState extends State<PublicBooking> {
       }).select();
 
       if (response.isNotEmpty) {
-        // --- SCHEDULE NOTIFICATION: 30 MIN BEFORE ---
         try {
           DateTime classDateTime = DateTime.parse("$courseDate $startTime");
           await NotificationService().scheduleTaskReminder(
             bookingId: response[0]['booking_id'].toString(),
             taskTitle: "Class Reminder: ${selectedCourseData!['course_name']}",
             taskDateTime: classDateTime,
-            minutesBefore: 30, // CHANGED FROM 5 TO 30
+            minutesBefore: 1, // notification
           );
         } catch (e) { debugPrint("Notification Error: $e"); }
       }
@@ -338,7 +335,10 @@ class _PublicBookingPageState extends State<PublicBooking> {
     const accentColor = Color(0xFF9D59FF);
     int maxCapacity = int.tryParse(selectedCourseData?['capacity']?.toString() ?? '20') ?? 20;
     bool isFull = currentPaxCount >= maxCapacity;
-    bool canBook = selectedCourseId != null && !isCheckingCapacity && !isFull && !hasUserBooked;
+
+    // Logic for deciding what to show
+    bool canBookWithPass = selectedCourseId != null && !isCheckingCapacity && !isFull && !hasUserBooked && userPasses > 0;
+    bool canBookWithPayment = selectedCourseId != null && !isCheckingCapacity && !isFull && !hasUserBooked;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F16),
@@ -371,39 +371,58 @@ class _PublicBookingPageState extends State<PublicBooking> {
                 ),
               ),
             ),
+
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: (canBook && userPasses > 0) ? Colors.green : const Color(0xFF2A2A3A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+
+            if (hasUserBooked)
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2A2A3A),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: null,
+                  child: const Text("ALREADY BOOKED", style: TextStyle(color: Colors.white30, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-                onPressed: (canBook && userPasses > 0) ? _confirmJoinWithPass : null,
-                child: Text(
-                  hasUserBooked ? "ALREADY BOOKED" : (userPasses > 0 ? "JOIN WITH PASSES" : "NO PASSES AVAILABLE"),
-                  style: TextStyle(color: (canBook && userPasses > 0) ? Colors.white : Colors.white30, fontWeight: FontWeight.bold),
+              )
+            else ...[
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: canBookWithPass ? Colors.green : const Color(0xFF2A2A3A),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: canBookWithPass ? _confirmJoinWithPass : null,
+                  child: Text(
+                    userPasses > 0 ? "JOIN WITH PASSES ($userPasses passes left)" : "NO PASSES AVAILABLE",
+                    style: TextStyle(color: canBookWithPass ? Colors.white : Colors.white30, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity, height: 56,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: canBook ? accentColor : const Color(0xFF2A2A3A),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
-                ),
-                onPressed: canBook ? _confirmJoin : null,
-                child: isCheckingCapacity
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                    hasUserBooked ? "ALREADY BOOKED" : (isFull ? "CLASS FULL" : "JOIN CLASS"),
-                    style: TextStyle(color: canBook ? Colors.white : Colors.white30, fontWeight: FontWeight.bold, fontSize: 16)
+              const SizedBox(height: 12),
+              // Cash/Payment Button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: canBookWithPayment ? accentColor : const Color(0xFF2A2A3A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                  ),
+                  onPressed: canBookWithPayment ? (isFull ? null : _confirmJoin) : null,
+                  child: isCheckingCapacity
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                      isFull ? "CLASS FULL" : "JOIN CLASS ",
+                      style: TextStyle(color: canBookWithPayment ? Colors.white : Colors.white30, fontWeight: FontWeight.bold, fontSize: 16)
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),

@@ -25,7 +25,6 @@ class NotificationService {
 
     if (Platform.isAndroid) {
       await Permission.notification.request();
-      // Check for exact alarm permission required for accurate 1-minute timing
       if (await Permission.scheduleExactAlarm.isDenied) {
         await Permission.scheduleExactAlarm.request();
       }
@@ -38,18 +37,13 @@ class NotificationService {
     required DateTime taskDateTime,
     int minutesBefore = 1,
   }) async {
-    // 1. Calculate the target notification time
     DateTime scheduledTime = taskDateTime.subtract(Duration(minutes: minutesBefore));
     DateTime now = DateTime.now();
 
-    // 2. Safety Logic: If the 1-minute mark has already passed (e.g., class starts in 45 seconds)
-    // we fire the notification in 5 seconds instead of skipping it.
     if (scheduledTime.isBefore(now)) {
       if (taskDateTime.isAfter(now)) {
         scheduledTime = now.add(const Duration(seconds: 5));
-        log('⚠️ Scheduled time passed; firing immediate reminder (5s delay).');
       } else {
-        log('❌ Class is already in the past. No notification set.');
         return;
       }
     }
