@@ -13,7 +13,7 @@ class PublicRecord extends StatefulWidget {
 class _PublicRecordState extends State<PublicRecord> {
   final supabase = Supabase.instance.client;
 
-  // Filters - Added ATTENDED and MISSED
+  // Filters
   String activeFilter = "ALL";
   final List<String> _filters = ["ALL", "CONFIRMED", "ATTENDED", "MISSED", "CANCELLED"];
 
@@ -74,6 +74,64 @@ class _PublicRecordState extends State<PublicRecord> {
         final inst = booking['instructor'];
         return inst != null && (inst['is_private'] == false || inst['is_private'] == null);
       }).toList();
+
+      final now = DateTime.now();
+
+      // --- BULLETPROOF AUTO-CONVERT UNATTENDED 'CONFIRMED' CLASSES TO 'MISSED' ---
+      for (var booking in allBookings) {
+        if (booking['booking_status'].toString().toUpperCase() == 'CONFIRMED') {
+          final dateStr = booking['booking_date'];
+          final endTimeStr = booking['end_time'];
+
+          if (dateStr != null && endTimeStr != null) {
+            try {
+              // Extract Date safely
+              DateTime parsedDate = DateTime.parse(dateStr.toString());
+
+              // Extract Time safely
+              int hour = 0;
+              int minute = 0;
+
+              final timeParts = endTimeStr.toString().split(':');
+              if (timeParts.length >= 2) {
+                hour = int.tryParse(timeParts[0]) ?? 0;
+                minute = int.tryParse(timeParts[1]) ?? 0;
+              }
+
+              // Create an exact DateTime object for when the class ends
+              DateTime classEndDateTime = DateTime(
+                parsedDate.year,
+                parsedDate.month,
+                parsedDate.day,
+                hour,
+                minute,
+              );
+
+              // If the current time is past the class end time, they missed it!
+              if (now.isAfter(classEndDateTime)) {
+                // Update the UI immediately
+                booking['booking_status'] = 'Missed';
+
+                // Auto-update the database in the background
+                final bookingId = booking['booking_id'] ?? booking['id'];
+                if (bookingId != null) {
+                  // Fire and forget update
+                  supabase
+                      .from('booking')
+                      .update({'booking_status': 'Missed'})
+                      .eq('booking_id', bookingId)
+                      .catchError((e) {
+                    debugPrint("Error updating DB to missed: $e");
+                  });
+                }
+              }
+            } catch (e) {
+              debugPrint("Date parse error for missed logic on booking ${booking['booking_id']}: $e");
+            }
+          }
+        }
+      }
+      // -----------------------------------------------------------------
 
       List<dynamic> filtered = activeFilter == "ALL"
           ? allBookings
@@ -196,9 +254,9 @@ class _PublicRecordState extends State<PublicRecord> {
   }
 
   Widget _buildClassCard(dynamic booking) {
-    final String statusStr = (booking['booking_status'] ?? "Confirmed").toString().toUpperCase();
+    final String statusStr = (booking['booking_status'] ?? "CONFIRMED").toString().toUpperCase();
 
-    // Assigning colors based on the new statuses
+    // Assigning colors based on statuses
     Color statusBgColor;
     Color statusTextColor;
 

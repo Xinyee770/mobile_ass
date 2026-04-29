@@ -16,7 +16,7 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
   String _selectedFilter = "All";
   final List<String> _filters = ["All", "CONFIRMED", "CANCELLED", "ATTEND", "MISSED"];
 
-  // --- NEW: Sort Options ---
+  // Sort Options
   String _selectedSort = "Nearest Day";
   final List<String> _sortOptions = ["Nearest Day", "Time", "Instructor (A-Z)", "Location"];
 
@@ -36,11 +36,9 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
 
   Future<List<dynamic>> _fetchPrivateBookings() async {
     try {
-      // 1. Get current user
       final user = supabase.auth.currentUser;
       if (user == null) return [];
 
-      // 2. Fetch only bookings where user_id matches the logged-in UUID
       final response = await supabase
           .from('booking')
           .select('''
@@ -49,13 +47,67 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
           courses(course_name),
           instructor(*)
         ''')
-          .eq('user_id', user.id) // <--- ADD THIS LINE
+          .eq('user_id', user.id)
           .order('booking_date', ascending: false);
 
-      final privateBookings = (response as List).where((booking) {
+      // --- FIX: Convert read-only maps to editable maps so we can update the status locally ---
+      final privateBookings = (response as List)
+          .map((b) => Map<String, dynamic>.from(b))
+          .where((booking) {
         final inst = booking['instructor'];
         return inst != null && inst['is_private'] == true;
       }).toList();
+
+      final now = DateTime.now();
+
+      // --- AUTO-CONVERT UNATTENDED 'CONFIRMED' CLASSES TO 'MISSED' ---
+      for (var booking in privateBookings) {
+        if (booking['booking_status'].toString().toUpperCase() == 'CONFIRMED') {
+          final dateStr = booking['booking_date'];
+          final endTimeStr = booking['end_time'];
+
+          if (dateStr != null && endTimeStr != null) {
+            try {
+              DateTime parsedDate = DateTime.parse(dateStr.toString());
+              int hour = 0;
+              int minute = 0;
+
+              final timeParts = endTimeStr.toString().split(':');
+              if (timeParts.length >= 2) {
+                hour = int.tryParse(timeParts[0]) ?? 0;
+                minute = int.tryParse(timeParts[1]) ?? 0;
+              }
+
+              DateTime classEndDateTime = DateTime(
+                parsedDate.year,
+                parsedDate.month,
+                parsedDate.day,
+                hour,
+                minute,
+              );
+
+              // If current time is past class end time, update to MISSED
+              if (now.isAfter(classEndDateTime)) {
+
+                // Update UI state locally (works now because of Map.from above)
+                booking['booking_status'] = 'MISSED';
+
+                // Update DB in background
+                final bookingId = booking['booking_id'] ?? booking['id'];
+                if (bookingId != null) {
+                  supabase
+                      .from('booking')
+                      .update({'booking_status': 'MISSED'})
+                      .eq('booking_id', bookingId)
+                      .catchError((e) => debugPrint("Error updating DB to missed: $e"));
+                }
+              }
+            } catch (e) {
+              debugPrint("Date parse error for missed logic: $e");
+            }
+          }
+        }
+      }
 
       return privateBookings;
     } catch (e) {
@@ -64,19 +116,15 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
     }
   }
 
-  // --- NEW: Sorting Logic ---
   void _sortBookings(List<dynamic> list) {
     switch (_selectedSort) {
       case "Nearest Day":
-      // Sort by date: soonest date first
         list.sort((a, b) => (a['booking_date'] ?? "").compareTo(b['booking_date'] ?? ""));
         break;
       case "Time":
-      // Sort by start_time
         list.sort((a, b) => (a['start_time'] ?? "").compareTo(b['start_time'] ?? ""));
         break;
       case "Instructor (A-Z)":
-      // Sort by instructor name
         list.sort((a, b) {
           String nameA = a['instructor']?['instructor_name'] ?? "ZZZ";
           String nameB = b['instructor']?['instructor_name'] ?? "ZZZ";
@@ -84,27 +132,17 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
         });
         break;
       case "Location":
-      // Sort by location string
         list.sort((a, b) => (a['location'] ?? "").compareTo(b['location'] ?? ""));
         break;
     }
   }
 
   String _calculateStatus(dynamic booking) {
-    String rawBookingStatus = (booking['booking_status'] ?? "").toString().toLowerCase();
+    String rawBookingStatus = (booking['booking_status'] ?? "").toString().toUpperCase();
 
-    if (rawBookingStatus == 'cancelled') return "Cancelled";
-    if (rawBookingStatus == 'attended' || rawBookingStatus == 'done') return "Attend";
-
-    // Logic for Missed: If not attended/cancelled and date is before today
-    DateTime bookingDate = DateTime.parse(booking['booking_date']);
-    DateTime today = DateTime.now();
-    // Clear time for date-only comparison
-    DateTime todayDate = DateTime(today.year, today.month, today.day);
-
-    if (bookingDate.isBefore(todayDate) && rawBookingStatus != 'attended') {
-      return "Missed";
-    }
+    if (rawBookingStatus == 'CANCELLED') return "Cancelled";
+    if (rawBookingStatus == 'ATTENDED' || rawBookingStatus == 'DONE') return "Attend";
+    if (rawBookingStatus == 'MISSED') return "Missed";
 
     return "Confirmed";
   }
@@ -123,7 +161,7 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
       body: Column(
         children: [
           _buildFilterSection(),
-          _buildSortSection(), // --- NEW SORT UI ---
+          _buildSortSection(),
           Expanded(
             child: FutureBuilder<List<dynamic>>(
               future: _fetchPrivateBookings(),
@@ -132,14 +170,15 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
                   return Center(child: CircularProgressIndicator(color: brandPurple));
                 }
 
-                // Filter the list based on selection
                 List<dynamic> bookings = snapshot.data ?? [];
+
+                // Filter
                 bookings = bookings.where((b) {
                   if (_selectedFilter == "All") return true;
                   return _calculateStatus(b).toUpperCase() == _selectedFilter.toUpperCase();
                 }).toList();
 
-                // Apply the sorting logic
+                // Sort
                 _sortBookings(bookings);
 
                 if (bookings.isEmpty) {
@@ -177,7 +216,6 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
     );
   }
 
-  // --- NEW: Sort UI Section ---
   Widget _buildSortSection() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -351,9 +389,9 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
         badgeBgColor = brandPurple.withOpacity(0.15);
         badgeTextColor = brandPurple;
         break;
-      case 'MISSED': // --- NEW CASE ---
-        badgeBgColor = const Color(0xFF422C1A); // Dark Amber/Brown
-        badgeTextColor = const Color(0xFFFFB74D); // Light Orange
+      case 'MISSED':
+        badgeBgColor = const Color(0xFF422C1A);
+        badgeTextColor = const Color(0xFFFFB74D);
         break;
       default:
         badgeBgColor = const Color(0xFF2A2A35);

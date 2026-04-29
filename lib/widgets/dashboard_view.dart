@@ -39,6 +39,7 @@ class _DashboardViewState extends State<DashboardView> {
   int _currentPage = 0;
   Timer? _bannerTimer;
   Timer? _countdownTimer;
+  Timer? _refreshTimer;
 
   // --- Countdown State ---
   Map<String, dynamic>? _nextBooking;
@@ -73,12 +74,18 @@ class _DashboardViewState extends State<DashboardView> {
     _pageController = PageController(initialPage: 0);
     _startAutoSlider();
     _fetchNextBooking();
+
+    // Auto-refresh data every 5 seconds to instantly catch new bookings or cancellations
+    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _fetchNextBooking();
+    });
   }
 
   @override
   void dispose() {
     _bannerTimer?.cancel();
     _countdownTimer?.cancel();
+    _refreshTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -89,21 +96,49 @@ class _DashboardViewState extends State<DashboardView> {
     if (user == null) return;
 
     try {
-      String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
+      // Get ALL active bookings
       final response = await Supabase.instance.client
           .from('booking')
           .select('*, courses(course_name)')
           .eq('user_id', user.id)
-          .gte('booking_date', today)
-          .order('booking_date', ascending: true)
-          .order('start_time', ascending: true)
-          .limit(1)
-          .maybeSingle();
+          .neq('booking_status', 'Cancelled');
 
-      if (response != null && mounted) {
-        setState(() => _nextBooking = response);
-        _startCountdown();
+      final now = DateTime.now();
+      List<Map<String, dynamic>> futureBookings = [];
+
+      // Parse dates and strictly filter out ANY class that has already passed
+      for (var b in response as List) {
+        final dateStr = b['booking_date'];
+        final timeStr = b['start_time'];
+
+        if (dateStr != null && timeStr != null) {
+          final classDateTime = DateTime.parse('$dateStr $timeStr');
+
+          if (classDateTime.isAfter(now)) {
+            b['parsed_datetime'] = classDateTime;
+            futureBookings.add(Map<String, dynamic>.from(b));
+          }
+        }
+      }
+
+      if (mounted) {
+        if (futureBookings.isNotEmpty) {
+          // Sort by closest date/time first
+          futureBookings.sort((a, b) =>
+              (a['parsed_datetime'] as DateTime).compareTo(b['parsed_datetime'] as DateTime));
+
+          setState(() {
+            _nextBooking = futureBookings.first;
+          });
+          _startCountdown();
+        } else {
+          // No upcoming bookings
+          setState(() {
+            _nextBooking = null;
+            _timeLeft = Duration.zero;
+          });
+          _countdownTimer?.cancel();
+        }
       }
     } catch (e) {
       debugPrint("Dashboard Countdown Fetch Error: $e");
@@ -112,35 +147,26 @@ class _DashboardViewState extends State<DashboardView> {
 
   // --- LOGIC: Timer Ticker ---
   void _startCountdown() {
-    _countdownTimer?.cancel();
+    _countdownTimer?.cancel(); // Cancel existing timer
+
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_nextBooking == null) return;
+      if (_nextBooking == null || !mounted) {
+        timer.cancel();
+        return;
+      }
 
-      try {
-        final DateTime classDate = DateTime.parse(_nextBooking!['booking_date']);
-        final String rawTime = _nextBooking!['start_time'].toString();
+      final classDateTime = _nextBooking!['parsed_datetime'] as DateTime;
+      final now = DateTime.now();
+      final difference = classDateTime.difference(now);
 
-        final List<String> timeParts = rawTime.split(':');
-        final int hour = int.parse(timeParts[0]);
-        final int minute = int.parse(timeParts[1]);
-
-        final DateTime classDateTime = DateTime(
-          classDate.year, classDate.month, classDate.day, hour, minute,
-        );
-
-        final now = DateTime.now();
-        final difference = classDateTime.difference(now);
-
-        if (difference.isNegative) {
-          _countdownTimer?.cancel();
-          _fetchNextBooking();
-        } else {
-          if (mounted) {
-            setState(() => _timeLeft = difference);
-          }
+      if (difference.isNegative) {
+        // Timer hit zero! Cancel and fetch the next booking in line
+        timer.cancel();
+        _fetchNextBooking();
+      } else {
+        if (mounted) {
+          setState(() => _timeLeft = difference);
         }
-      } catch (e) {
-        _countdownTimer?.cancel();
       }
     });
   }
@@ -154,8 +180,6 @@ class _DashboardViewState extends State<DashboardView> {
           duration: const Duration(milliseconds: 800),
           curve: Curves.easeInOutQuart,
         );
-
-        // This forces the UI to re-check the clock for the weather banner every 4 seconds
         if (mounted) setState(() {});
       }
     });
@@ -227,7 +251,6 @@ class _DashboardViewState extends State<DashboardView> {
       color: widget.theme.primary,
       backgroundColor: const Color(0xFF1E1E2C),
       onRefresh: () async {
-        // Refresh your data here
         await _fetchNextBooking();
         await Future.delayed(const Duration(seconds: 1));
       },
@@ -316,12 +339,12 @@ class _DashboardViewState extends State<DashboardView> {
 
           const SizedBox(height: 35),
 
-          // 3. Upcoming Classes (Friend's Timer Logic)
+          // 3. Upcoming Classes
           _buildSectionTitle("Upcoming Classes"),
           const SizedBox(height: 15),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _buildUpcomingBox(), // Corrected to friend's function name
+            child: _buildUpcomingBox(),
           ),
 
           const SizedBox(height: 35),
@@ -335,12 +358,12 @@ class _DashboardViewState extends State<DashboardView> {
 
           const SizedBox(height: 40),
 
-          // 5. Studio Locator (Friend's Map Logic)
+          // 5. Studio Locator
           _buildSectionTitle("Our Studios"),
           const SizedBox(height: 15),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: _buildInteractiveMapWithDetails(), // Corrected to friend's function name
+            child: _buildInteractiveMapWithDetails(),
           ),
 
           const SizedBox(height: 50),
@@ -355,31 +378,24 @@ class _DashboardViewState extends State<DashboardView> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 1. PUBLIC CLASS
           _buildActionItem(
             Icons.groups_rounded,
             "Public",
             Colors.purpleAccent,
-                () => widget.onNavigate(const PublicBooking()), // Direct Link
+                () => widget.onNavigate(const PublicBooking()),
           ),
-
-          // 2. PRIVATE CLASS
           _buildActionItem(
             Icons.person_add_rounded,
             "Private",
             Colors.blueAccent,
-                () => widget.onNavigate(const BookingPage()), // Direct Link
+                () => widget.onNavigate(const BookingPage()),
           ),
-
-          // 3. WALLET TOP UP
           _buildActionItem(
             Icons.account_balance_wallet_rounded,
             "Top-Up",
             Colors.orangeAccent,
-                () => widget.onNavigate(const WalletTopUp()), // Direct Link
+                () => widget.onNavigate(const WalletTopUp()),
           ),
-
-          // 4. CHECK-IN (Placeholder - adjust if you have a QR page)
           _buildActionItem(
             Icons.qr_code_scanner_rounded,
             "Check-in",
@@ -392,7 +408,6 @@ class _DashboardViewState extends State<DashboardView> {
   }
 
   void _showCheckInQR(BuildContext context) {
-    // We grab the ID from Supabase directly
     final userId = Supabase.instance.client.auth.currentUser?.id ?? "No ID";
 
     showModalBottomSheet(
@@ -409,7 +424,7 @@ class _DashboardViewState extends State<DashboardView> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-              child: QrImageView(data: userId, size: 200), // Uses the same QR library
+              child: QrImageView(data: userId, size: 200),
             ),
             const SizedBox(height: 20),
             Text("ID: $userId", style: const TextStyle(color: Colors.white24, fontSize: 10)),
@@ -419,7 +434,6 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  // Update helper to accept an onTap function
   Widget _buildActionItem(IconData icon, String label, Color color, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -448,7 +462,6 @@ class _DashboardViewState extends State<DashboardView> {
     );
   }
 
-  // Handy helper to keep code clean
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -473,14 +486,17 @@ class _DashboardViewState extends State<DashboardView> {
           children: [
             Icon(Icons.calendar_today_outlined, color: Colors.white.withOpacity(0.2), size: 32),
             const SizedBox(height: 12),
-            Text("No classes booked yet", style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14)),
+            Text("No upcoming classes", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14)),
           ],
         ),
       );
     }
 
     final String courseName = _nextBooking!['courses']?['course_name'] ?? "Class";
-    String hours = _timeLeft.inHours.toString().padLeft(2, '0');
+
+    // Calculate Days, Hours, Minutes, Seconds
+    String days = _timeLeft.inDays.toString().padLeft(2, '0');
+    String hours = (_timeLeft.inHours % 24).toString().padLeft(2, '0');
     String minutes = (_timeLeft.inMinutes % 60).toString().padLeft(2, '0');
     String seconds = (_timeLeft.inSeconds % 60).toString().padLeft(2, '0');
 
@@ -525,6 +541,8 @@ class _DashboardViewState extends State<DashboardView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              _timeUnit(days, "DAYS"),
+              _timeDivider(),
               _timeUnit(hours, "HRS"),
               _timeDivider(),
               _timeUnit(minutes, "MIN"),
@@ -540,7 +558,8 @@ class _DashboardViewState extends State<DashboardView> {
   Widget _timeUnit(String val, String label) {
     return Column(
       children: [
-        Text(val, style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+        Text(val, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+        const SizedBox(height: 2),
         Text(label, style: const TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.bold)),
       ],
     );
@@ -548,8 +567,8 @@ class _DashboardViewState extends State<DashboardView> {
 
   Widget _timeDivider() {
     return const Padding(
-      padding: EdgeInsets.only(left: 12, right: 12, bottom: 15),
-      child: Text(":", style: TextStyle(color: Colors.white38, fontSize: 28, fontWeight: FontWeight.bold)),
+      padding: EdgeInsets.only(left: 8, right: 8, bottom: 12),
+      child: Text(":", style: TextStyle(color: Colors.white38, fontSize: 24, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -608,50 +627,40 @@ class _DashboardViewState extends State<DashboardView> {
       return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
     }
 
-    // 1. Get today's date in YYYY-MM-DD format
-    // This produces "2026-04-28"
     String todayDate = DateTime.now().toString().split(' ')[0];
-
     dynamic todayData;
 
-    // 2. SCAN the list to find the item where 'date' matches '2026-04-28'
     if (widget.weatherData is List) {
       List<dynamic> weatherList = widget.weatherData;
       todayData = weatherList.firstWhere(
             (element) => element['date'] == todayDate,
-        orElse: () => weatherList[0], // Fallback to first item if not found
+        orElse: () => weatherList[0],
       );
     } else {
       todayData = widget.weatherData;
     }
 
-
     int hour = DateTime.now().hour;
     bool isNight = hour >= 18 || hour < 6;
 
-    // 3. Get the correct forecast slot
     String rawForecast = "";
     if (hour < 12) {
       rawForecast = todayData['morning_forecast']?.toString().toLowerCase() ?? "";
     } else if (hour < 18) {
       rawForecast = todayData['afternoon_forecast']?.toString().toLowerCase() ?? "";
     } else {
-      // Because we found 2026-04-28, this will now correctly be "ribut petir..."
       rawForecast = todayData['night_forecast']?.toString().toLowerCase() ?? "";
     }
 
-    // 4. Keyword check
     bool isRainy = (rawForecast.contains("hujan") || rawForecast.contains("ribut"))
         && !rawForecast.contains("tiada");
     bool isCloudy = rawForecast.contains("berawan") || rawForecast.contains("mendung");
 
-    // 5. Pick UI elements
     String displayTitle = isRainy ? "Stormy" : (isCloudy ? "Cloudy" : "Clear Skies");
     String subtitleText = isRainy
         ? "Lightning outside! Stay safe."
         : (isNight ? "Great night for a late session!" : "Perfect day for practice!");
 
-    // Background logic
     String bgUrl = isRainy
         ? (isNight
         ? "https://cdn.suwalls.com/wallpapers/fantasy/rainy-city-at-night-16438-1920x1080.jpg"
@@ -705,7 +714,7 @@ class _DashboardViewState extends State<DashboardView> {
 
   Widget _buildCarousel() {
     return SizedBox(
-      height: 180, // Slightly taller for more impact
+      height: 180,
       child: PageView.builder(
         controller: _pageController,
         onPageChanged: (int page) => setState(() => _currentPage = page),

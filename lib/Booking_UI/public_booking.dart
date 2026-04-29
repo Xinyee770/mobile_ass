@@ -17,11 +17,11 @@ class _PublicBookingPageState extends State<PublicBooking> {
   dynamic selectedCourseId;
   Map<String, dynamic>? selectedCourseData;
   bool isLoading = true;
-  int userPasses = 0; // Allow to join with passes
+  int userPasses = 0;
 
-  // --- NEW: Track pax counts for the selected class ---
   int currentPaxCount = 0;
   bool isCheckingCapacity = false;
+  bool hasUserBooked = false;
 
   final List<Map<String, dynamic>> studios = [
     {'id': 'A', 'name': 'Studio A (Setapak)', 'address': '38-06, Vista Danau Kota, KL'},
@@ -38,9 +38,61 @@ class _PublicBookingPageState extends State<PublicBooking> {
   Future<void> _loadData() async {
     try {
       final data = await supabase.from('courses').select('*, instructor(*)');
+      final now = DateTime.now();
+
       final filteredData = (data as List).where((course) {
         final inst = course['instructor'];
-        return inst != null && inst['is_private'] == false;
+        // 1. Must have an instructor and must be public
+        if (inst == null || inst['is_private'] == true) return false;
+
+        // 2. Safely parse date and time to filter out past classes
+        final dateStr = course['date'];
+        final timeStr = course['course_start'];
+
+        if (dateStr == null) return false; // Hide if no date assigned
+
+        try {
+          // Extract Date
+          DateTime parsedDate = DateTime.parse(dateStr.toString());
+
+          // Extract Time
+          int hour = 0;
+          int minute = 0;
+
+          if (timeStr != null) {
+            final timeParts = timeStr.toString().split(':');
+            if (timeParts.length >= 2) {
+              hour = int.tryParse(timeParts[0]) ?? 0;
+              minute = int.tryParse(timeParts[1]) ?? 0;
+            }
+          }
+
+          // Combine into a single precise DateTime object
+          DateTime classDateTime = DateTime(
+            parsedDate.year,
+            parsedDate.month,
+            parsedDate.day,
+            hour,
+            minute,
+          );
+
+          // If the class has already passed, hide it
+          if (classDateTime.isBefore(now)) {
+            return false;
+          }
+        } catch (e) {
+          debugPrint("Date parse error for course ${course['course_id']}: $e");
+          // Fallback: Check just the calendar day if time parsing fails
+          try {
+            DateTime classDate = DateTime.parse(dateStr.toString().substring(0, 10));
+            DateTime today = DateTime(now.year, now.month, now.day);
+            if (classDate.isBefore(today)) {
+              return false; // Hide it!
+            }
+          } catch (_) {}
+        }
+
+        return true; // Keep the course if it passes all checks
       }).toList();
 
       final user = supabase.auth.currentUser;
@@ -60,29 +112,36 @@ class _PublicBookingPageState extends State<PublicBooking> {
         isLoading = false;
       });
     } catch (e) {
+      debugPrint("Load error: $e");
       setState(() => isLoading = false);
     }
   }
 
-  // --- NEW: Check how many people have booked this specific class ---
   Future<void> _checkClassCapacity(dynamic courseId, String courseDate) async {
     setState(() {
       isCheckingCapacity = true;
-      currentPaxCount = 0; // reset
+      currentPaxCount = 0;
+      hasUserBooked = false;
     });
 
     try {
-      // Query the booking table for this specific class and date
-      // We exclude Cancelled status so they don't count towards capacity
       final countResponse = await supabase
           .from('booking')
-          .select('booking_id')
+          .select('booking_id, user_id')
           .eq('course_id', courseId)
           .eq('booking_date', courseDate)
           .neq('booking_status', 'Cancelled');
 
+      final userId = supabase.auth.currentUser?.id;
+      bool alreadyBooked = false;
+
+      if (userId != null) {
+        alreadyBooked = (countResponse as List).any((booking) => booking['user_id'] == userId);
+      }
+
       setState(() {
         currentPaxCount = (countResponse as List).length;
+        hasUserBooked = alreadyBooked;
         isCheckingCapacity = false;
       });
     } catch (e) {
@@ -91,7 +150,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
     }
   }
 
-  // --- Confirmation Popup with Date & Time ---
   void _confirmJoin() {
     String displayDate = "-";
     if (selectedCourseData!['date'] != null) {
@@ -213,7 +271,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
     );
   }
 
-
   Widget _popupDetailRow(IconData icon, String label, String val) {
     return Row(
       children: [
@@ -225,7 +282,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
     );
   }
 
-  // --- Actual Booking Logic ---
   Future<void> _executeBooking() async {
     try {
       final user = supabase.auth.currentUser;
@@ -247,12 +303,11 @@ class _PublicBookingPageState extends State<PublicBooking> {
         'booking_date': courseDate,
         'start_time': startTime,
         'end_time': endTime,
-        'location': selectedCourseData!['location'] ?? 'Main Studio', // Don't forget location!
+        'location': selectedCourseData!['location'] ?? 'Main Studio',
         'booking_status': 'Confirmed',
       }).select();
 
       if (response.isNotEmpty) {
-        // --- NOTIFICATION SCHEDULING ---
         try {
           final dateParts = courseDate.split('-');
           final timeParts = startTime.split(':');
@@ -276,6 +331,9 @@ class _PublicBookingPageState extends State<PublicBooking> {
         }
 
         if (!mounted) return;
+
+        setState(() => hasUserBooked = true);
+
         Navigator.push(context, MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])));
       }
     } catch (e) {
@@ -305,13 +363,11 @@ class _PublicBookingPageState extends State<PublicBooking> {
       final String startTime = selectedCourseData!['course_start'];
       final String endTime = selectedCourseData!['course_end'];
 
-      // Deduct pass
       await supabase
           .from('profiles')
           .update({'passes': userPasses - 1})
           .eq('id', user.id);
 
-      // Create booking
       final response = await supabase.from('booking').insert({
         'user_id': user.id,
         'course_id': selectedCourseId,
@@ -323,12 +379,11 @@ class _PublicBookingPageState extends State<PublicBooking> {
         'booking_status': 'Confirmed',
       }).select();
 
-      // Update UI
       setState(() {
         userPasses -= 1;
+        hasUserBooked = true;
       });
 
-      // Notification
       try {
         final classDateTime = DateTime.parse("$courseDate $startTime");
 
@@ -342,7 +397,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
         debugPrint("Notification failed: $e");
       }
 
-      // Success message (NO payment page)
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -379,33 +433,45 @@ class _PublicBookingPageState extends State<PublicBooking> {
   Widget build(BuildContext context) {
     const accentColor = Color(0xFF9D59FF);
 
-    // --- Determine logic for the Join Button ---
     int maxCapacity = int.tryParse(selectedCourseData?['capacity']?.toString() ?? '20') ?? 20;
     bool isFull = currentPaxCount >= maxCapacity;
 
-    // The button is disabled if NO course is selected, OR if the capacity is checking, OR if it's full.
-    bool canBook = selectedCourseId != null && !isCheckingCapacity && !isFull;
+    bool canBook = selectedCourseId != null && !isCheckingCapacity && !isFull && !hasUserBooked;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F16),
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, title: const Text("Join a Class", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text("Join a Class", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       body: isLoading ? const Center(child: CircularProgressIndicator(color: accentColor)) : Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Select Session", style: TextStyle(color: Colors.white70, fontSize: 14)),
-            const SizedBox(height: 12),
-            _buildDropdownBox(accentColor),
-            const SizedBox(height: 24),
-            if (selectedCourseData != null) ...[
-              const Text("Class Summary", style: TextStyle(color: Colors.white70, fontSize: 14)),
-              const SizedBox(height: 12),
-              _buildConsolidatedInfoBox(),
-            ],
-            const Spacer(),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Select Session", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const SizedBox(height: 12),
+                    _buildDropdownBox(accentColor),
+                    const SizedBox(height: 24),
+                    if (selectedCourseData != null) ...[
+                      const Text("Class Summary", style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      const SizedBox(height: 12),
+                      _buildConsolidatedInfoBox(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
 
-            // Join with passes
+            const SizedBox(height: 16),
+
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -413,12 +479,14 @@ class _PublicBookingPageState extends State<PublicBooking> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: (canBook && userPasses > 0) ? Colors.green : const Color(0xFF2A2A3A),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),),
-                  onPressed: (canBook && userPasses > 0) ? _confirmJoinWithPass : null,
-                  child: Text(
-                  userPasses > 0 ? "JOIN WITH PASSES" : "NO PASSES AVAILABLE",
+                onPressed: (canBook && userPasses > 0) ? _confirmJoinWithPass : null,
+                child: Text(
+                  hasUserBooked
+                      ? "ALREADY BOOKED"
+                      : (userPasses > 0 ? "JOIN WITH PASSES" : "NO PASSES AVAILABLE"),
                   style: TextStyle(
-                  color: (canBook && userPasses > 0) ? Colors.white : Colors.white30,
-                  fontWeight: FontWeight.bold,
+                    color: (canBook && userPasses > 0) ? Colors.white : Colors.white30,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
@@ -426,12 +494,10 @@ class _PublicBookingPageState extends State<PublicBooking> {
 
             const SizedBox(height: 12),
 
-            // Join Class
             SizedBox(
               width: double.infinity, height: 56,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  // Turn button grey/red if full
                     backgroundColor: canBook ? accentColor : const Color(0xFF2A2A3A),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
                 ),
@@ -439,7 +505,9 @@ class _PublicBookingPageState extends State<PublicBooking> {
                 child: isCheckingCapacity
                     ? const CircularProgressIndicator(color: Colors.white)
                     : Text(
-                    isFull ? "CLASS FULL" : "JOIN CLASS",
+                    hasUserBooked
+                        ? "ALREADY BOOKED"
+                        : (isFull ? "CLASS FULL" : "JOIN CLASS"),
                     style: TextStyle(
                         color: canBook ? Colors.white : Colors.white30,
                         fontWeight: FontWeight.bold,
@@ -488,7 +556,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
           ),
           const SizedBox(height: 16),
 
-          // --- NEW: Visual Pax Counter ---
           const Divider(color: Colors.white10),
           const SizedBox(height: 10),
           Row(
@@ -537,7 +604,6 @@ class _PublicBookingPageState extends State<PublicBooking> {
               selectedCourseId = val;
               selectedCourseData = publicCourses.firstWhere((c) => c['course_id'] == val);
             });
-            // --- TRIGGER THE CAPACITY CHECK WHEN SELECTED ---
             if (selectedCourseData != null) {
               String classDate = selectedCourseData!['date'] ?? DateFormat('yyyy-MM-dd').format(DateTime.now());
               _checkClassCapacity(val, classDate);
