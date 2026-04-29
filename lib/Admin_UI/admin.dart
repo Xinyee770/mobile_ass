@@ -137,160 +137,6 @@ class _AdminState extends State<Admin> {
   }
 
   // =========================
-  // VALIDATION
-  // =========================
-
-  bool validateCourse({
-    required TextEditingController name,
-    required TextEditingController price,
-    required TextEditingController instructor,
-    required TextEditingController level,
-    required TextEditingController capacity,
-    required TextEditingController start,
-    required TextEditingController end,
-    required TextEditingController date,
-    required String? location,
-  }) {
-    final nameText = name.text.trim();
-    final priceText = price.text.trim();
-    final instructorText = instructor.text.trim();
-    final levelText = level.text.trim();
-    final capacityText = capacity.text.trim();
-
-    final lettersOnly = RegExp(r'^[a-zA-Z ]+$');
-    final numbersOnly = RegExp(r'^[0-9]+$');
-    final decimalOnly = RegExp(r'^[0-9]+(\.[0-9]+)?$');
-
-    if (nameText.isEmpty) {
-      showMsg("Please enter class name");
-      return false;
-    }
-
-    if (!lettersOnly.hasMatch(nameText)) {
-      showMsg("Class name can only contain letters");
-      return false;
-    }
-
-    if (priceText.isEmpty) {
-      showMsg("Please enter price");
-      return false;
-    }
-
-    if (!decimalOnly.hasMatch(priceText)) {
-      showMsg("Price can only contain numbers");
-      return false;
-    }
-
-    if (double.parse(priceText) <= 0) {
-      showMsg("Price must be greater than 0");
-      return false;
-    }
-
-    if (instructorText.isEmpty) {
-      showMsg("Please enter instructor ID");
-      return false;
-    }
-
-    if (!numbersOnly.hasMatch(instructorText)) {
-      showMsg("Instructor ID can only contain numbers");
-      return false;
-    }
-
-    if (levelText.isEmpty) {
-      showMsg("Please enter level");
-      return false;
-    }
-
-    if (!lettersOnly.hasMatch(levelText)) {
-      showMsg("Level can only contain letters");
-      return false;
-    }
-
-    if (capacityText.isEmpty) {
-      showMsg("Please enter capacity");
-      return false;
-    }
-
-    if (!numbersOnly.hasMatch(capacityText)) {
-      showMsg("Capacity can only contain numbers");
-      return false;
-    }
-
-    if (int.parse(capacityText) <= 0) {
-      showMsg("Capacity must be greater than 0");
-      return false;
-    }
-
-    if (start.text.trim().isEmpty) {
-      showMsg("Please select start time");
-      return false;
-    }
-
-    if (end.text.trim().isEmpty) {
-      showMsg("Please select end time");
-      return false;
-    }
-
-    if (date.text.trim().isEmpty) {
-      showMsg("Please select date");
-      return false;
-    }
-
-    if (location == null || location.isEmpty) {
-      showMsg("Please select location");
-      return false;
-    }
-
-    return true;
-  }
-
-  bool validateUser({
-    required TextEditingController name,
-    required TextEditingController email,
-    required TextEditingController passes,
-  }) {
-    final nameText = name.text.trim();
-    final emailText = email.text.trim();
-    final passesText = passes.text.trim();
-
-    final nameRegex = RegExp(r'^[a-zA-Z ]+$');
-    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-    final numberRegex = RegExp(r'^[0-9]+$');
-
-    if (nameText.isEmpty) {
-      showMsg("Please enter name");
-      return false;
-    }
-
-    if (emailText.isEmpty) {
-      showMsg("Please enter email");
-      return false;
-    }
-
-    if (!emailRegex.hasMatch(emailText)) {
-      showMsg("Invalid email format");
-      return false;
-    }
-
-    if (passesText.isEmpty) {
-      showMsg("Please enter passes");
-      return false;
-    }
-
-    if (!numberRegex.hasMatch(passesText)) {
-      showMsg("Passes must be a number");
-      return false;
-    }
-
-    if (int.parse(passesText) < 0) {
-      showMsg("Passes cannot be negative");
-      return false;
-    }
-
-    return true;
-  }
-
-  // =========================
   // DATE AND TIME FUNCTIONS
   // =========================
 
@@ -512,36 +358,94 @@ class _AdminState extends State<Admin> {
 
     String? selectedLocation;
 
+    String? nameError;
+    String? priceError;
+    String? instructorError;
+    String? levelError;
+    String? capacityError;
+    String? startError;
+    String? endError;
+    String? dateError;
+    String? locationError;
+
     await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:  Text(
+        title: Text(
           "Add Class",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: StatefulBuilder(
           builder: (context, setDialogState) {
+            Widget errorText(String? error) {
+              if (error == null) return SizedBox.shrink();
+
+              return Padding(
+                padding: EdgeInsets.only(left: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    error,
+                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
+              );
+            }
+
             return SingleChildScrollView(
               child: Column(
                 children: [
                   inputField(name, "Class Name"),
+                  errorText(nameError),
+
                   inputField(price, "Price"),
+                  errorText(priceError),
+
                   inputField(instructor, "Instructor ID"),
+                  errorText(instructorError),
+
                   inputField(level, "Level"),
+                  errorText(levelError),
+
                   inputField(capacity, "Capacity"),
-                  pickerField(start, "Start Time", Icons.access_time, () => pickTime(start),),
-                  pickerField(end, "End Time", Icons.access_time, () => pickTime(end),),
-                  pickerField(date, "Date", Icons.calendar_today, () => pickDate(date),),
+                  errorText(capacityError),
+
+                  pickerField(
+                    start,
+                    "Start Time",
+                    Icons.access_time,
+                        () => pickTime(start),
+                  ),
+                  errorText(startError),
+
+                  pickerField(
+                    end,
+                    "End Time",
+                    Icons.access_time,
+                        () => pickTime(end),
+                  ),
+                  errorText(endError),
+
+                  pickerField(
+                    date,
+                    "Date",
+                    Icons.calendar_today,
+                        () => pickDate(date),
+                  ),
+                  errorText(dateError),
+
                   locationDropdown(
                     selectedLocation: selectedLocation,
                     onChanged: (value) {
                       setDialogState(() {
                         selectedLocation = value;
+                        locationError = null;
                       });
                     },
                   ),
+                  errorText(locationError),
                 ],
               ),
             );
@@ -550,7 +454,7 @@ class _AdminState extends State<Admin> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child:  Text("Cancel"),
+            child: Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -558,19 +462,96 @@ class _AdminState extends State<Admin> {
               foregroundColor: Colors.black,
             ),
             onPressed: () async {
-              if (!validateCourse(
-                name: name,
-                price: price,
-                instructor: instructor,
-                level: level,
-                capacity: capacity,
-                start: start,
-                end: end,
-                date: date,
-                location: selectedLocation,
-              )) {
-                return;
+              final lettersOnly = RegExp(r'^[a-zA-Z ]+$');
+              final capacityValue = int.tryParse(capacity.text.trim());
+              final priceValue = double.tryParse(price.text.trim());
+              final instructorValue = int.tryParse(instructor.text.trim());
+
+              bool hasError = false;
+
+              nameError = null;
+              priceError = null;
+              instructorError = null;
+              levelError = null;
+              capacityError = null;
+              startError = null;
+              endError = null;
+              dateError = null;
+              locationError = null;
+
+              if (name.text.trim().isEmpty) {
+                nameError = "Please enter class name";
+                hasError = true;
+              } else if (!lettersOnly.hasMatch(name.text.trim())) {
+                nameError = "Class name can only contain letters";
+                hasError = true;
               }
+
+              if (price.text.trim().isEmpty) {
+                priceError = "Please enter price";
+                hasError = true;
+              } else if (priceValue == null) {
+                priceError = "Price must be a valid number";
+                hasError = true;
+              } else if (priceValue <= 0) {
+                priceError = "Price must be greater than 0";
+                hasError = true;
+              }
+
+              if (instructor.text.trim().isEmpty) {
+                instructorError = "Please enter instructor ID";
+                hasError = true;
+              } else if (instructorValue == null) {
+                instructorError = "Instructor ID must be a valid number";
+                hasError = true;
+              } else if (instructorValue <= 0) {
+                instructorError = "Instructor ID must be greater than 0";
+                hasError = true;
+              }
+
+              if (level.text.trim().isEmpty) {
+                levelError = "Please enter level";
+                hasError = true;
+              } else if (!lettersOnly.hasMatch(level.text.trim())) {
+                levelError = "Level must be letters";
+                hasError = true;
+              }
+
+              if (capacity.text.trim().isEmpty) {
+                capacityError = "Please enter capacity";
+                hasError = true;
+              } else if (capacityValue == null) {
+                capacityError = "Capacity must be a valid number";
+                hasError = true;
+              } else if (capacityValue <= 0) {
+                capacityError = "Capacity must be greater than 0";
+                hasError = true;
+              }
+
+              if (start.text.trim().isEmpty) {
+                startError = "Please select start time";
+                hasError = true;
+              }
+
+              if (end.text.trim().isEmpty) {
+                endError = "Please select end time";
+                hasError = true;
+              }
+
+              if (date.text.trim().isEmpty) {
+                dateError = "Please select date";
+                hasError = true;
+              }
+
+              if (selectedLocation == null || selectedLocation!.isEmpty) {
+                locationError = "Please select location";
+                hasError = true;
+              }
+
+              // refresh dialog UI to show errors
+              (dialogContext as Element).markNeedsBuild();
+
+              if (hasError) return;
 
               try {
                 await supabase.from('courses').insert({
@@ -595,7 +576,7 @@ class _AdminState extends State<Admin> {
                 debugPrint("ADD COURSE ERROR: $e");
               }
             },
-            child:  Text("Add"),
+            child: Text("Add"),
           ),
         ],
       ),
@@ -603,14 +584,14 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> editCourseDialog(Map<String, dynamic> course) async {
-    final name = TextEditingController(text: course['course_name']?.toString() ?? '',);
-    final price = TextEditingController(text: course['course_price']?.toString() ?? '',);
-    final instructorId = TextEditingController(text: course['instructor_id']?.toString() ?? '',);
-    final level = TextEditingController(text: course['level']?.toString() ?? '',);
-    final capacity = TextEditingController(text: course['capacity']?.toString() ?? '',);
-    final start = TextEditingController(text: course['course_start']?.toString() ?? '',);
-    final end = TextEditingController(text: course['course_end']?.toString() ?? '',);
-    final date = TextEditingController(text: course['date']?.toString() ?? '',);
+    final name = TextEditingController(text: course['course_name']?.toString() ?? '');
+    final price = TextEditingController(text: course['course_price']?.toString() ?? '');
+    final instructorId = TextEditingController(text: course['instructor_id']?.toString() ?? '');
+    final level = TextEditingController(text: course['level']?.toString() ?? '');
+    final capacity = TextEditingController(text: course['capacity']?.toString() ?? '');
+    final start = TextEditingController(text: course['course_start']?.toString() ?? '');
+    final end = TextEditingController(text: course['course_end']?.toString() ?? '');
+    final date = TextEditingController(text: course['date']?.toString() ?? '');
 
     String? selectedLocation = course['location']?.toString();
 
@@ -618,65 +599,126 @@ class _AdminState extends State<Admin> {
       selectedLocation = null;
     }
 
+    String? nameError;
+    String? priceError;
+    String? instructorError;
+    String? levelError;
+    String? capacityError;
+    String? startError;
+    String? endError;
+    String? dateError;
+    String? locationError;
+
     await showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: cardBg,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title:  Text(
-          "Edit Class",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: StatefulBuilder(
+      builder: (dialogContext) {
+        return StatefulBuilder(
           builder: (context, setDialogState) {
-            return SingleChildScrollView(
-              child: Column(
-                children: [
-                  inputField(name, "Class Name"),
-                  inputField(price, "Price"),
-                  inputField(instructorId, "Instructor ID"),
-                  inputField(level, "Level"),
-                  inputField(capacity, "Capacity"),
-                  pickerField(start, "Start Time", Icons.access_time, () => pickTime(start),),
-                  pickerField(end, "End Time", Icons.access_time, () => pickTime(end),),
-                  pickerField(date, "Date", Icons.calendar_today, () => pickDate(date),),
-                  locationDropdown(
-                    selectedLocation: selectedLocation,
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedLocation = value;
-                      });
-                    },
+            Widget errorText(String? error) {
+              if (error == null) return SizedBox.shrink();
+
+              return Padding(
+                padding: EdgeInsets.only(left: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    error,
+                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
                   ),
-                ],
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child:  Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accent,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () async {
-              if (!validateCourse(
-                name: name,
-                price: price,
-                instructor: instructorId,
-                level: level,
-                capacity: capacity,
-                start: start,
-                end: end,
-                date: date,
-                location: selectedLocation,
-              )) {
-                return;
-              }
+                ),
+              );
+            }
+
+            void validateAndSave() async {
+              final lettersOnly = RegExp(r'^[a-zA-Z ]+$');
+              final capacityValue = int.tryParse(capacity.text.trim());
+              final priceValue = double.tryParse(price.text.trim());
+              final instructorValue = int.tryParse(instructorId.text.trim());
+
+              bool hasError = false;
+
+              setDialogState(() {
+                nameError = null;
+                priceError = null;
+                instructorError = null;
+                levelError = null;
+                capacityError = null;
+                startError = null;
+                endError = null;
+                dateError = null;
+                locationError = null;
+
+                if (name.text.trim().isEmpty) {
+                  nameError = "Please enter class name";
+                  hasError = true;
+                } else if (!lettersOnly.hasMatch(name.text.trim())) {
+                  nameError = "Class name can only contain letters";
+                  hasError = true;
+                }
+
+                if (price.text.trim().isEmpty) {
+                  priceError = "Please enter price";
+                  hasError = true;
+                } else if (priceValue == null) {
+                  priceError = "Price must be a valid number";
+                  hasError = true;
+                } else if (priceValue <= 0) {
+                  priceError = "Price must be greater than 0";
+                  hasError = true;
+                }
+
+                if (instructorId.text.trim().isEmpty) {
+                  instructorError = "Please enter instructor ID";
+                  hasError = true;
+                } else if (instructorValue == null) {
+                  instructorError = "Instructor ID must be a valid number";
+                  hasError = true;
+                } else if (instructorValue <= 0) {
+                  instructorError = "Instructor ID must be greater than 0";
+                  hasError = true;
+                }
+
+                if (level.text.trim().isEmpty) {
+                  levelError = "Please enter level";
+                  hasError = true;
+                } else if (!lettersOnly.hasMatch(level.text.trim())) {
+                  levelError = "Level can only contain letters";
+                  hasError = true;
+                }
+
+                if (capacity.text.trim().isEmpty) {
+                  capacityError = "Please enter capacity";
+                  hasError = true;
+                } else if (capacityValue == null) {
+                  capacityError = "Capacity must be a valid number";
+                  hasError = true;
+                } else if (capacityValue <= 0) {
+                  capacityError = "Capacity must be greater than 0";
+                  hasError = true;
+                }
+
+                if (start.text.trim().isEmpty) {
+                  startError = "Please select start time";
+                  hasError = true;
+                }
+
+                if (end.text.trim().isEmpty) {
+                  endError = "Please select end time";
+                  hasError = true;
+                }
+
+                if (date.text.trim().isEmpty) {
+                  dateError = "Please select date";
+                  hasError = true;
+                }
+
+                if (selectedLocation == null || selectedLocation!.isEmpty) {
+                  locationError = "Please select location";
+                  hasError = true;
+                }
+              });
+
+              if (hasError) return;
 
               try {
                 await supabase.from('courses').update({
@@ -695,17 +737,93 @@ class _AdminState extends State<Admin> {
 
                 Navigator.of(dialogContext).pop();
                 await loadData();
-
                 showMsg("Class updated successfully", color: Colors.green);
               } catch (e) {
                 showMsg("Update failed: $e");
                 debugPrint("UPDATE COURSE ERROR: $e");
               }
-            },
-            child:  Text("Save"),
-          ),
-        ],
-      ),
+            }
+
+            return AlertDialog(
+              backgroundColor: cardBg,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+              title: Text(
+                "Edit Class",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    inputField(name, "Class Name"),
+                    errorText(nameError),
+
+                    inputField(price, "Price"),
+                    errorText(priceError),
+
+                    inputField(instructorId, "Instructor ID"),
+                    errorText(instructorError),
+
+                    inputField(level, "Level"),
+                    errorText(levelError),
+
+                    inputField(capacity, "Capacity"),
+                    errorText(capacityError),
+
+                    pickerField(
+                      start,
+                      "Start Time",
+                      Icons.access_time,
+                          () => pickTime(start),
+                    ),
+                    errorText(startError),
+
+                    pickerField(
+                      end,
+                      "End Time",
+                      Icons.access_time,
+                          () => pickTime(end),
+                    ),
+                    errorText(endError),
+
+                    pickerField(
+                      date,
+                      "Date",
+                      Icons.calendar_today,
+                          () => pickDate(date),
+                    ),
+                    errorText(dateError),
+
+                    locationDropdown(
+                      selectedLocation: selectedLocation,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedLocation = value;
+                          locationError = null;
+                        });
+                      },
+                    ),
+                    errorText(locationError),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text("Cancel"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accent,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: validateAndSave,
+                  child: Text("Save"),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -874,47 +992,84 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> editUserDialog(Map<String, dynamic> user) async {
-    final name = TextEditingController(text: user['name']);
-    final email = TextEditingController(text: user['email']);
-    final passes = TextEditingController(text: user['passes'].toString());
+    final name = TextEditingController(text: user['name']?.toString() ?? '');
+    final email = TextEditingController(text: user['email']?.toString() ?? '');
+    final passes = TextEditingController(text: user['passes']?.toString() ?? '0');
+
+    String? nameError;
+    String? emailError;
+    String? passesError;
 
     await showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: cardBg,
-        title:  Text("Edit Member", style: TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            inputField(name, "Name"),
-            inputField(email, "Email"),
-            inputField(passes, "Passes"),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child:  Text("Cancel"),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: accent),
-            onPressed: () async {
-              if (!validateUser(
-                name: name,
-                email: email,
-                passes: passes,
-              )) {
-                return;
-              }
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Widget errorText(String? error) {
+              if (error == null) return SizedBox.shrink();
+
+              return Padding(
+                padding: EdgeInsets.only(left: 8, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    error,
+                    style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
+              );
+            }
+
+            Future<void> validateAndSave() async {
+              final nameRegex = RegExp(r'^[a-zA-Z ]+$');
+              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+              final passesValue = int.tryParse(passes.text.trim());
+
+              bool hasError = false;
+
+              setDialogState(() {
+                nameError = null;
+                emailError = null;
+                passesError = null;
+
+                if (name.text.trim().isEmpty) {
+                  nameError = "Please enter name";
+                  hasError = true;
+                } else if (!nameRegex.hasMatch(name.text.trim())) {
+                  nameError = "Name can only contain letters";
+                  hasError = true;
+                }
+
+                if (email.text.trim().isEmpty) {
+                  emailError = "Please enter email";
+                  hasError = true;
+                } else if (!emailRegex.hasMatch(email.text.trim())) {
+                  emailError = "Please enter a valid email";
+                  hasError = true;
+                }
+
+                if (passes.text.trim().isEmpty) {
+                  passesError = "Please enter passes";
+                  hasError = true;
+                } else if (passesValue == null) {
+                  passesError = "Passes must be a valid number";
+                  hasError = true;
+                } else if (passesValue < 0) {
+                  passesError = "Passes cannot be negative";
+                  hasError = true;
+                }
+              });
+
+              if (hasError) return;
+
               try {
-                await supabase
-                    .from('profiles')
-                    .update({
+                await supabase.from('profiles').update({
                   'name': name.text.trim(),
                   'email': email.text.trim(),
-                  'passes': int.tryParse(passes.text.trim()) ?? 0,
-                })
-                    .eq('id', user['id']);
+                  'passes': passesValue,
+                }).eq('id', user['id']);
+
+                if (!mounted) return;
 
                 Navigator.pop(dialogContext);
                 await loadData();
@@ -923,11 +1078,42 @@ class _AdminState extends State<Admin> {
               } catch (e) {
                 showMsg("Update failed: $e");
               }
-            },
-            child:  Text("Save"),
-          ),
-        ],
-      ),
+            }
+
+            return AlertDialog(
+              backgroundColor: cardBg,
+              title: Text(
+                "Edit Member",
+                style: TextStyle(color: Colors.white),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  inputField(name, "Name"),
+                  errorText(nameError),
+
+                  inputField(email, "Email"),
+                  errorText(emailError),
+
+                  inputField(passes, "Passes"),
+                  errorText(passesError),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text("Cancel"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: accent),
+                  onPressed: validateAndSave,
+                  child: Text("Save"),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
