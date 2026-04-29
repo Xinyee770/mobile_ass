@@ -12,13 +12,23 @@ class PublicUpdate extends StatefulWidget {
 
 class _PublicUpdateState extends State<PublicUpdate> {
   final supabase = Supabase.instance.client;
+
   bool isCancelled = false;
+  bool isAttended = false;
+  bool isMissed = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.booking['booking_status']?.toString().toLowerCase() == 'cancelled') {
+
+    final status = widget.booking['booking_status']?.toString().toLowerCase() ?? '';
+
+    if (status == 'cancelled') {
       isCancelled = true;
+    } else if (status == 'attended' || status == 'completed') {
+      isAttended = true;
+    } else if (status == 'missed') {
+      isMissed = true;
     }
   }
 
@@ -39,7 +49,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
         backgroundColor: const Color(0xFF1E1E2C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Cancel Class", style: TextStyle(color: Colors.white)),
-        content: const Text("Are you sure you want to cancel your spot? This cannot be undone."),
+        content: const Text("Are you sure you want to cancel your spot? This cannot be undone.", style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -58,7 +68,6 @@ class _PublicUpdateState extends State<PublicUpdate> {
         final user = supabase.auth.currentUser;
         if (user == null) return;
 
-        // Updates status to Cancelled
         await supabase
             .from('booking')
             .update({'booking_status': 'Cancelled'})
@@ -82,8 +91,11 @@ class _PublicUpdateState extends State<PublicUpdate> {
     const bgColor = Color(0xFF0F0F16);
     const accentColor = Color(0xFF9D59FF);
     const dangerColor = Color(0xFFFF5959);
+    const successColor = Color(0xFF00C853);
+    const warningColor = Color(0xFFFFB300);
 
-    // Date formatting
+    final bool isLocked = isCancelled || isAttended || isMissed;
+
     DateTime date = DateTime.parse(widget.booking['booking_date']);
     String formattedDate = DateFormat('EEEE, d MMMM yyyy').format(date);
 
@@ -93,7 +105,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
-        title: Text(isCancelled ? "Booking Detail" : "Manage Booking",
+        title: Text(isLocked ? "Booking Detail" : "Manage Booking",
             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -104,7 +116,9 @@ class _PublicUpdateState extends State<PublicUpdate> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isCancelled) _buildStatusBanner(dangerColor),
+            if (isCancelled) _buildStatusBanner(dangerColor, "Booking Cancelled", Icons.cancel_outlined),
+            if (isAttended) _buildStatusBanner(successColor, "Class Attended", Icons.check_circle_outline),
+            if (isMissed) _buildStatusBanner(warningColor, "Class Missed", Icons.info_outline),
 
             _sectionLabel("COURSE INFORMATION"),
             _buildDetailTile(Icons.auto_awesome, "Class Name", widget.booking['courses']?['course_name'] ?? "Public Class", accentColor),
@@ -125,7 +139,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
             const SizedBox(height: 60),
 
-            if (!isCancelled)
+            if (!isLocked)
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -139,7 +153,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
                 ),
               ),
 
-            if (isCancelled)
+            if (isLocked)
               const Center(
                 child: Text(
                   "This record is locked and kept for your history.",
@@ -192,7 +206,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
     );
   }
 
-  Widget _buildStatusBanner(Color color) {
+  Widget _buildStatusBanner(Color color, String text, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 24),
@@ -203,11 +217,11 @@ class _PublicUpdateState extends State<PublicUpdate> {
       ),
       child: Row(
         children: [
-          Icon(Icons.cancel_outlined, color: color, size: 22),
+          Icon(icon, color: color, size: 22),
           const SizedBox(width: 12),
-          const Text(
-            "Booking Cancelled",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ],
       ),
