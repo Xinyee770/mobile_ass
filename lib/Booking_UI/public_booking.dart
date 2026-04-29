@@ -17,6 +17,7 @@ class _PublicBookingPageState extends State<PublicBooking> {
   dynamic selectedCourseId;
   Map<String, dynamic>? selectedCourseData;
   bool isLoading = true;
+  int userPasses = 0; // Allow to join with passes
 
   // --- NEW: Track pax counts for the selected class ---
   int currentPaxCount = 0;
@@ -41,6 +42,18 @@ class _PublicBookingPageState extends State<PublicBooking> {
         final inst = course['instructor'];
         return inst != null && inst['is_private'] == false;
       }).toList();
+
+      final user = supabase.auth.currentUser;
+
+      if (user != null) {
+        final profile = await supabase
+            .from('profiles')
+            .select('passes')
+            .eq('id', user.id)
+            .single();
+
+        userPasses = profile['passes'] ?? 0;
+      }
 
       setState(() {
         publicCourses = List<Map<String, dynamic>>.from(filteredData);
@@ -130,6 +143,77 @@ class _PublicBookingPageState extends State<PublicBooking> {
     );
   }
 
+  void _confirmJoinWithPass() {
+    String displayDate = "-";
+    if (selectedCourseData!['date'] != null) {
+      try {
+        displayDate = DateFormat('d MMM yyyy')
+            .format(DateTime.parse(selectedCourseData!['date']));
+      } catch (e) {
+        displayDate = selectedCourseData!['date'];
+      }
+    }
+
+    String startTime =
+        selectedCourseData!['course_start']?.toString().substring(0, 5) ?? "-";
+    String endTime =
+        selectedCourseData!['course_end']?.toString().substring(0, 5) ?? "-";
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E2C),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Use Pass?",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Use 1 pass to join '${selectedCourseData!['course_name']}'?",
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            const SizedBox(height: 16),
+
+            _popupDetailRow(Icons.calendar_today, "Date", displayDate),
+            const SizedBox(height: 8),
+
+            _popupDetailRow(Icons.access_time, "Time", "$startTime - $endTime"),
+            const SizedBox(height: 8),
+
+            _popupDetailRow(Icons.confirmation_number, "Passes Left",
+                "$userPasses"),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCEL",
+                style: TextStyle(color: Colors.white30)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _executeBookingWithPass();
+            },
+            child: const Text("CONFIRM",
+                style:
+                TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   Widget _popupDetailRow(IconData icon, String label, String val) {
     return Row(
       children: [
@@ -199,6 +283,79 @@ class _PublicBookingPageState extends State<PublicBooking> {
     }
   }
 
+  Future<void> _executeBookingWithPass() async {
+    try {
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please login first")),
+        );
+        return;
+      }
+
+      if (userPasses <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No passes available!")),
+        );
+        return;
+      }
+
+      final String courseDate = selectedCourseData!['date'];
+      final String startTime = selectedCourseData!['course_start'];
+      final String endTime = selectedCourseData!['course_end'];
+
+      // Deduct pass
+      await supabase
+          .from('profiles')
+          .update({'passes': userPasses - 1})
+          .eq('id', user.id);
+
+      // Create booking
+      final response = await supabase.from('booking').insert({
+        'user_id': user.id,
+        'course_id': selectedCourseId,
+        'instructor_id': selectedCourseData!['instructor_id'],
+        'booking_date': courseDate,
+        'start_time': startTime,
+        'end_time': endTime,
+        'location': selectedCourseData!['location'],
+        'booking_status': 'Confirmed',
+      }).select();
+
+      // Update UI
+      setState(() {
+        userPasses -= 1;
+      });
+
+      // Notification
+      try {
+        final classDateTime = DateTime.parse("$courseDate $startTime");
+
+        await NotificationService().scheduleTaskReminder(
+          bookingId: response[0]['booking_id'].toString(),
+          taskTitle: "Public Class: ${selectedCourseData!['course_name']}",
+          taskDateTime: classDateTime,
+          minutesBefore: 5,
+        );
+      } catch (e) {
+        debugPrint("Notification failed: $e");
+      }
+
+      // Success message (NO payment page)
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Booked successfully using pass!")),
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   void _showAddressPopup(String studioName) {
     final studio = studios.firstWhere(
           (s) => studioName.toUpperCase().contains(s['id']),
@@ -247,6 +404,29 @@ class _PublicBookingPageState extends State<PublicBooking> {
               _buildConsolidatedInfoBox(),
             ],
             const Spacer(),
+
+            // Join with passes
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: (canBook && userPasses > 0) ? Colors.green : const Color(0xFF2A2A3A),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),),
+                  onPressed: (canBook && userPasses > 0) ? _confirmJoinWithPass : null,
+                  child: Text(
+                  userPasses > 0 ? "JOIN WITH PASSES" : "NO PASSES AVAILABLE",
+                  style: TextStyle(
+                  color: (canBook && userPasses > 0) ? Colors.white : Colors.white30,
+                  fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Join Class
             SizedBox(
               width: double.infinity, height: 56,
               child: ElevatedButton(
