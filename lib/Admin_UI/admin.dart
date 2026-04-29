@@ -974,11 +974,11 @@ class _AdminState extends State<Admin> {
     final avgRevenue = bookings.isEmpty ? 0 : totalRevenue / bookings.length;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding:  EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+           Text(
             "Overview Dashboard",
             style: TextStyle(
               color: Colors.white,
@@ -987,36 +987,36 @@ class _AdminState extends State<Admin> {
             ),
           ),
 
-          const SizedBox(height: 6),
+           SizedBox(height: 6),
 
-          const Text(
+           Text(
             "Overview of members, bookings and revenue",
             style: TextStyle(color: Colors.grey),
           ),
 
-          const SizedBox(height: 18),
+           SizedBox(height: 18),
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(22),
+            padding:  EdgeInsets.all(22),
             decoration: BoxDecoration(
-              color: const Color(0xFF9D59FF),
+              color:  Color(0xFF9D59FF),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.account_balance_wallet,
+                 Icon(Icons.account_balance_wallet,
                     color: Colors.white, size: 38),
-                const SizedBox(height: 14),
-                const Text(
+                 SizedBox(height: 14),
+                 Text(
                   "Total Revenue",
                   style: TextStyle(color: Colors.white70, fontSize: 15),
                 ),
-                const SizedBox(height: 6),
+                 SizedBox(height: 6),
                 Text(
                   "RM ${totalRevenue.toStringAsFixed(2)}",
-                  style: const TextStyle(
+                  style:  TextStyle(
                     color: Colors.white,
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
@@ -1026,15 +1026,15 @@ class _AdminState extends State<Admin> {
             ),
           ),
 
-          const SizedBox(height: 18),
+           SizedBox(height: 18),
 
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+            physics:  NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.15,
+            childAspectRatio: 1.0,
             children: [
               statCard("Active Members", activeMembers.toString(), Icons.people),
               statCard("Total Classes", courses.length.toString(), Icons.class_),
@@ -1125,21 +1125,27 @@ class _AdminState extends State<Admin> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: accent, size: 36),
-           SizedBox(height: 10),
+          Icon(icon, color: accent, size: 30),
+          SizedBox(height: 8),
           Text(
             title,
             textAlign: TextAlign.center,
-            style:  TextStyle(color: Colors.grey),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.grey, fontSize: 14),
           ),
-           SizedBox(height: 8),
-          Text(
-            value,
-            textAlign: TextAlign.center,
-            style:  TextStyle(
-              color: Colors.white,
-              fontSize: 21,
-              fontWeight: FontWeight.bold,
+          SizedBox(height: 6),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -1192,25 +1198,22 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   void initState() {
     super.initState();
-    // NEW: Automatically clean up old bookings when the admin opens the scanner
     markMissedClasses();
   }
 
-  // NEW: Logic for past classes
   Future<void> markMissedClasses() async {
     try {
       final now = DateTime.now();
       final currentDate = DateFormat('yyyy-MM-dd').format(now);
       final currentTime = DateFormat('HH:mm:ss').format(now);
 
-      // Update to 'Missed' if date is in the past OR date is today but class ended
       await supabase
           .from('booking')
           .update({'booking_status': 'Missed'})
           .eq('booking_status', 'Confirmed')
-          .or('booking_date.lt.$currentDate,and(booking_date.eq.$currentDate,end_time.lt.$currentTime)');
-
-      debugPrint("Checked and updated missed classes.");
+          .or(
+        'booking_date.lt.$currentDate,and(booking_date.eq.$currentDate,end_time.lt.$currentTime)',
+      );
     } catch (e) {
       debugPrint("Error marking missed classes: $e");
     }
@@ -1220,12 +1223,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
     try {
       final userId = qrValue.trim();
       final now = DateTime.now();
-      final currentTime = DateFormat('HH:mm:ss').format(now);
       final currentDate = DateFormat('yyyy-MM-dd').format(now);
+      final currentTime = DateFormat('HH:mm:ss').format(now);
 
-      // NEW: Allows check-in up to 15 minutes before the start_time
       final startTimeWithGrace = DateFormat('HH:mm:ss').format(
-          now.add(const Duration(minutes: 15))
+        now.add(const Duration(minutes: 15)),
       );
 
       if (userId.isEmpty) {
@@ -1234,7 +1236,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
         return;
       }
 
-      // 1. Check if user exists
       final profile = await supabase
           .from('profiles')
           .select('name, email')
@@ -1247,40 +1248,48 @@ class _QRScannerPageState extends State<QRScannerPage> {
         return;
       }
 
-      // 2. UPDATED: Update Booking Status with Grace Period
+      final existing = await supabase
+          .from('attendance')
+          .select()
+          .eq('user_id', userId)
+          .eq('attendance_date', currentDate);
+
+      if (existing.isNotEmpty) {
+        await showErrorDialog(
+          "Already Checked-in",
+          "This user already checked in today.",
+        );
+        setState(() => scanned = false);
+        return;
+      }
+
       final activeBooking = await supabase
           .from('booking')
           .update({'booking_status': 'Attended'})
           .eq('user_id', userId)
           .eq('booking_date', currentDate)
-          .lte('start_time', startTimeWithGrace) // Can scan 15 mins early
-          .gte('end_time', currentTime)          // Cannot scan after class ends
+          .lte('start_time', startTimeWithGrace)
+          .gte('end_time', currentTime)
           .select();
 
-      // 3. Prevent duplicate attendance records for the day
-      final existing = await supabase
-          .from('attendance')
-          .select()
-          .eq('user_id', userId)
-          .eq('created_at', currentDate);
-
-      if (existing.isNotEmpty) {
-        await showErrorDialog("Already Checked-in", "This user already checked in today.");
+      try {
+        await supabase.from('attendance').insert({
+          'user_id': userId,
+          'status': 'Present',
+          'attendance_date': currentDate,
+        });
+      } catch (e) {
+        await showErrorDialog(
+          "Already Checked-in",
+          "This user already checked in today.",
+        );
         setState(() => scanned = false);
         return;
       }
 
-      // 4. Insert attendance record
-      await supabase.from('attendance').insert({
-        'user_id': userId,
-        'status': 'Present',
-      });
-
       if (!mounted) return;
 
-      // SUCCESS POPUP
-      // Use the email field to show if a booking was actually found or just general attendance
-      String displayInfo = activeBooking.isNotEmpty
+      final displayInfo = activeBooking.isNotEmpty
           ? "${profile['email']}\n(Booking Marked Attended)"
           : "${profile['email']}\n(General Attendance Only)";
 
@@ -1288,7 +1297,6 @@ class _QRScannerPageState extends State<QRScannerPage> {
         profile['name'] ?? 'Member',
         displayInfo,
       );
-
     } catch (e) {
       if (!mounted) return;
       await showErrorDialog("Scan Error", e.toString());
@@ -1296,9 +1304,9 @@ class _QRScannerPageState extends State<QRScannerPage> {
     }
   }
 
-  // --- YOUR DIALOGS AND BUTTONS BELOW (UNCHANGED) ---
-
   Future<void> showErrorDialog(String title, String message) async {
+    if (!mounted) return;
+
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1308,34 +1316,57 @@ class _QRScannerPageState extends State<QRScannerPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             Icon(Icons.error, color: Colors.red, size: 60),
-             SizedBox(height: 12),
-            Text(message, style:  TextStyle(color: Colors.white70)),
+            const Icon(Icons.error, color: Colors.red, size: 60),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: const TextStyle(color: Colors.white70),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK"),
+          ),
         ],
       ),
     );
   }
 
   Future<void> showSuccessDialog(String name, String email) async {
+    if (!mounted) return;
+
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Check-in Successful", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Check-in Successful",
+          style: TextStyle(color: Colors.white),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.check_circle, color: Colors.green, size: 70),
             const SizedBox(height: 12),
-            Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 6),
-            Text(email, style: const TextStyle(color: Colors.grey), textAlign: TextAlign.center),
+            Text(
+              email,
+              style: const TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
         actions: [
@@ -1344,7 +1375,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
               Navigator.pop(context);
               setState(() => scanned = false);
             },
-            child:  Text("Done"),
+            child: const Text("Done"),
           ),
         ],
       ),
@@ -1352,22 +1383,37 @@ class _QRScannerPageState extends State<QRScannerPage> {
   }
 
   Future<void> scanFromImage() async {
+    if (scanned) return;
+
     try {
+      scanned = true;
+
       final picker = ImagePicker();
       final pickedImage = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedImage == null) return;
-      final barcodeCapture = await scannerController.analyzeImage(pickedImage.path);
+
+      if (pickedImage == null) {
+        scanned = false;
+        return;
+      }
+
+      final barcodeCapture =
+      await scannerController.analyzeImage(pickedImage.path);
+
       if (barcodeCapture == null || barcodeCapture.barcodes.isEmpty) {
         throw Exception("No QR code found in image");
       }
+
       final value = barcodeCapture.barcodes.first.rawValue;
-      if (value == null || value.isEmpty) throw Exception("QR code has no value");
-      saveAttendance(value);
+
+      if (value == null || value.isEmpty) {
+        throw Exception("QR code has no value");
+      }
+
+      await saveAttendance(value);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Image scan failed: $e"), backgroundColor: Colors.red),
-      );
+      await showErrorDialog("Image Scan Failed", e.toString());
+      setState(() => scanned = false);
     }
   }
 
@@ -1380,42 +1426,57 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:  Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF1A1A1A),
       appBar: AppBar(
-        backgroundColor:  Color(0xFF3B2F4F),
-        title:  Text("Scan Attendance QR"),
+        backgroundColor: const Color(0xFF3B2F4F),
+        title: const Text(
+          "Scan Attendance QR",
+          style: TextStyle(color: Colors.white),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(icon: const Icon(Icons.image), onPressed: scanFromImage),
+          IconButton(
+            icon: const Icon(Icons.image),
+            onPressed: scanFromImage,
+          ),
         ],
       ),
       body: Stack(
         children: [
           MobileScanner(
             controller: scannerController,
-            onDetect: (capture) {
+            onDetect: (capture) async {
               if (scanned) return;
+
               final barcode = capture.barcodes.first;
               final value = barcode.rawValue;
-              if (value != null) {
-                scanned = true;
-                saveAttendance(value);
+
+              if (value != null && value.isNotEmpty) {
+                setState(() => scanned = true);
+                await saveAttendance(value);
               }
             },
           ),
+
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding:  EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF9D59FF),
+                  backgroundColor: const Color(0xFF9D59FF),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 onPressed: scanFromImage,
-                icon:  Icon(Icons.image_search),
-                label:  Text("Scan QR From Image"),
+                icon: const Icon(Icons.image_search),
+                label: const Text("Scan QR From Image"),
               ),
             ),
           ),
