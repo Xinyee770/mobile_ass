@@ -233,4 +233,22 @@ class WalletService {
       return false;
     }
   }
+
+  Future<List<Map<String, dynamic>>> getRawPayments() async {
+    try {
+      // Get the current user ID just like you did in the PaymentService
+      final user = _supabase.auth.currentUser;
+      if (user == null) return [];
+
+      final response = await _supabase
+          .from('payment')
+          .select('payment_method, amount')
+          .eq('user_id', user.id) // <--- ADD THIS FILTER HERE
+          .eq('status', 'paid');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      return [];
+    }
+  }
 }

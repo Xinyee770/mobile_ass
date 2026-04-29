@@ -180,7 +180,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               _filterLabel("PAYMENT STATUS"),
               const SizedBox(height: 8),
               _buildModalFilterRow(
-                options: ["All", "Success", "Pending", "Refunded"],
+                options: ["All", "Paid", "Pending", "Refunded"],
                 currentValue: _filterStatus,
                 onSelected: (val) {
                   setModalState(() => _filterStatus = val);
@@ -194,7 +194,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               const SizedBox(height: 8),
               _buildModalFilterRow(
                 // Added "Paid" to this list
-                options: ["All", "Paid", "Confirmed", "Cancelled", "Attended", "Missed"],
+                options: ["All", "Confirmed", "Cancelled", "Attended", "Missed"],
                 currentValue: _filterBookingStatus,
                 onSelected: (val) {
                   setModalState(() => _filterBookingStatus = val);
@@ -243,9 +243,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
       bool bookMatch = false;
       if (_filterBookingStatus == 'All') {
         bookMatch = true;
-      } else if (_filterBookingStatus == 'Paid') {
-        // If "Paid" is selected in the booking row, show anything with successful payment
-        bookMatch = (pStatus == 'success');
       } else {
         // Otherwise, match the actual booking status (Confirmed, Cancelled, etc.)
         bookMatch = bStatus == _filterBookingStatus.toLowerCase();
@@ -280,7 +277,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
       color = Colors.orangeAccent;
     } else if (s == 'refunded' || s == 'cancelled' || s == 'missed') {
       color = Colors.redAccent;
-    } else if (s == 'success' || s == 'confirmed' || s == 'paid') { // Added 'paid' here
+    } else if (s == 'paid' || s == 'confirmed') {
       color = Colors.greenAccent;
     } else if (s == 'attended') {
       color = Colors.blueAccent; // Attended usually looks good in Blue
@@ -305,6 +302,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
+  // --- 1. Updated Card (IDs REMOVED) ---
   Widget _buildTransactionCard(Map<String, dynamic> item) {
     final status = item['status'].toString().toLowerCase();
     final booking = item['booking'];
@@ -312,15 +310,8 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
     final instructor = booking['instructor'];
     final String courseType = (instructor != null && instructor['is_private'] == true)
-        ? "Private Class"
-        : "Public Class";
-
-    // Format the Payment Date (when the money was moved)
-    String paymentDate = "N/A";
-    if (item['created_at'] != null) {
-      DateTime dt = DateTime.parse(item['created_at']);
-      paymentDate = "${dt.day}/${dt.month}/${dt.year}";
-    }
+        ? "Private"
+        : "Public";
 
     return GestureDetector(
       onTap: () => _showReceiptDetail(item),
@@ -339,7 +330,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Showing both helps the user see "Cancelled" vs "Refunded"
                   Wrap(
                       spacing: 6,
                       children: [
@@ -347,8 +337,18 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                         _buildStatusBadge("BKG", bStatus)
                       ]
                   ),
-                  Text("TXN-${item['payment_id']}",
-                      style: TextStyle(color: textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                  // Top right now shows the Course Type instead of the Transaction ID
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      courseType.toUpperCase(),
+                      style: TextStyle(color: textMuted, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -356,22 +356,10 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   booking['courses']['course_name'],
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)
               ),
-              const SizedBox(height: 4),
-              Text(courseType.toUpperCase(),
-                  style: TextStyle(color: primaryPurple, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 12),
-              // Focused Metadata: Payment Date & Booking ID (No Location)
-              Row(
-                children: [
-                  Icon(Icons.calendar_month_outlined, size: 14, color: textMuted),
-                  const SizedBox(width: 5),
-                  Text("Paid: $paymentDate", style: TextStyle(color: textMuted, fontSize: 13)),
-                  const SizedBox(width: 15),
-                  Icon(Icons.confirmation_number_outlined, size: 14, color: textMuted),
-                  const SizedBox(width: 5),
-                  Text("ID: #${item['booking_id']}", style: TextStyle(color: textMuted, fontSize: 13)),
-                ],
-              ),
+
+              // USE THE METADATA FUNCTION HERE
+              _buildCardMetadata(item),
 
               const Divider(height: 32, color: Colors.white10),
               Row(
@@ -402,16 +390,25 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  Widget _buildCardMetadata(Map<String, dynamic> booking) {
+  // --- 2. Fixed Metadata Function (IDs REMOVED) ---
+  Widget _buildCardMetadata(Map<String, dynamic> item) {
+    String paymentDate = "N/A";
+    if (item['created_at'] != null) {
+      DateTime dt = DateTime.parse(item['created_at']);
+      paymentDate = "${dt.day}/${dt.month}/${dt.year}";
+    }
+
+    final String location = item['booking']['location'] ?? "Main Studio";
+
     return Row(
       children: [
-        Icon(Icons.calendar_today, size: 14, color: textMuted),
+        Icon(Icons.calendar_month_outlined, size: 14, color: textMuted),
         const SizedBox(width: 5),
-        Text(booking['booking_date'] ?? "N/A", style: TextStyle(color: textMuted, fontSize: 13)),
+        Text(paymentDate, style: TextStyle(color: textMuted, fontSize: 13)),
         const SizedBox(width: 15),
         Icon(Icons.location_on_outlined, size: 14, color: textMuted),
         const SizedBox(width: 5),
-        Text(booking['location'] ?? "Main Studio", style: TextStyle(color: textMuted, fontSize: 13)),
+        Text(location, style: TextStyle(color: textMuted, fontSize: 13)),
       ],
     );
   }
@@ -423,8 +420,8 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
     final instructor = item['booking']?['instructor'];
     final String courseType = (instructor != null && instructor['is_private'] == true)
-        ? "Private Class"
-        : "Public Class";
+        ? "Private"
+        : "Public";
 
     showModalBottomSheet(
       context: context,
@@ -447,7 +444,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
             // --- SECTION 1: FINANCIAL INFO ---
             _filterLabel("FINANCIAL SUMMARY"),
-            _buildDetailRow("Transaction ID", "TXN-${item['payment_id']}"),
+            // REMOVED: Transaction ID Row
             _buildDetailRow("Method", item['payment_method'] ?? "Wallet Payment"),
             _buildDetailRow("Payment Date", item['created_at']?.split('T')[0] ?? "N/A"),
             _buildDetailRow(
@@ -460,11 +457,12 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
             const SizedBox(height: 20),
 
-            // --- SECTION 2: BOOKING INFO (The "Product") ---
+            // --- SECTION 2: BOOKING INFO ---
             _filterLabel("PURCHASE DETAILS"),
             _buildDetailRow("Course", item['booking']['courses']['course_name']),
             _buildDetailRow("Class Type", courseType),
-            _buildDetailRow("Booking ID", "#${item['booking_id']}"),
+            _buildDetailRow("Instructor", item['booking']['instructor']?['instructor_name'] ?? "TBA"),
+            _buildDetailRow("Location", item['booking']['location'] ?? "Main Studio"),
             _buildDetailRow(
                 "Booking Status",
                 (item['booking']['booking_status'] ?? "Confirmed").toUpperCase(),
@@ -473,6 +471,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
             // --- SECTION 3: REFUND OVERVIEW (Conditional) ---
             if (isRefunded) ...[
+              const SizedBox(height: 10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -492,9 +491,9 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
             ],
 
+            const SizedBox(height: 25),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -535,7 +534,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
         // 2. Updated Logic Gate
         // Button only shows if: Payment is 'success' AND status is NOT 'attended'
-        if (status == 'success' && bookingStatus != 'attended' && bookingStatus != 'missed') ...[
+        if (status == 'paid' && bookingStatus != 'attended' && bookingStatus != 'missed') ...[
           const SizedBox(height: 12),
           TextButton(
             onPressed: () {
