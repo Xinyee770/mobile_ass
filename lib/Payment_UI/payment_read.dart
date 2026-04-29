@@ -194,7 +194,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
               const SizedBox(height: 8),
               _buildModalFilterRow(
                 // Added "Paid" to this list
-                options: ["All", "Paid", "Confirmed", "Cancelled", "Attended"],
+                options: ["All", "Paid", "Confirmed", "Cancelled", "Attended", "Missed"],
                 currentValue: _filterBookingStatus,
                 onSelected: (val) {
                   setModalState(() => _filterBookingStatus = val);
@@ -278,7 +278,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
     if (s == 'pending' || s == 'waiting') {
       color = Colors.orangeAccent;
-    } else if (s == 'refunded' || s == 'cancelled') {
+    } else if (s == 'refunded' || s == 'cancelled' || s == 'missed') {
       color = Colors.redAccent;
     } else if (s == 'success' || s == 'confirmed' || s == 'paid') { // Added 'paid' here
       color = Colors.greenAccent;
@@ -535,7 +535,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
 
         // 2. Updated Logic Gate
         // Button only shows if: Payment is 'success' AND status is NOT 'attended'
-        if (status == 'success' && bookingStatus != 'attended') ...[
+        if (status == 'success' && bookingStatus != 'attended' && bookingStatus != 'missed') ...[
           const SizedBox(height: 12),
           TextButton(
             onPressed: () {
