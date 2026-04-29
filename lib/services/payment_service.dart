@@ -121,7 +121,11 @@ class PaymentService {
       final pdf = pw.Document();
 
       // --- 1. DEEP DATA EXTRACTION ---
-      final booking = item['booking'] ?? {};
+      final Map<String, dynamic> booking = (item.containsKey('booking') && item['booking'] is Map)
+          ? item['booking']
+          : item;
+
+      // Now extract from our "smart" booking variable
       final course = booking['courses'] ?? {};
       final instructor = booking['instructor'] ?? {};
 

@@ -89,6 +89,7 @@ class _PaymentState extends State<Payment> {
       receiptData['payment_id'] = _pendingPaymentId;
       receiptData['payment_method'] = _selectedMethod;
       receiptData['amount'] = amount;
+      receiptData['status'] = 'paid';
 
       _confettiController.play();
       _showAdvancedSuccess(context, amount, receiptData);
