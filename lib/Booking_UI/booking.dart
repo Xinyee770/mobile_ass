@@ -16,7 +16,6 @@ class BookingPage extends StatefulWidget {
 class _BookingPageState extends State<BookingPage> {
   final supabase = Supabase.instance.client;
 
-  // --- Studio Data ---
   final List<Map<String, dynamic>> studios = [
     {'id': 'A', 'name': 'Studio A (Setapak)', 'address': '38-06, Vista Danau Kota, KL', 'lat': 3.2096, 'lng': 101.7188},
     {'id': 'B', 'name': 'Studio B (Bentong)', 'address': 'No.33 Taman Orkid, Bentong', 'lat': 3.5222, 'lng': 101.9108},
@@ -24,10 +23,8 @@ class _BookingPageState extends State<BookingPage> {
   ];
 
   final List<String> _allTimeSlots = [
-    '09:00:00', '10:00:00', '11:00:00', '12:00:00',
-    '13:00:00', '14:00:00', '15:00:00', '16:00:00',
     '17:00:00', '18:00:00', '19:00:00', '20:00:00',
-    '21:00:00', '22:00:00', '23:00:00'
+    '21:00:00', '21:20:00', '21:30:00', '22:00:00'
   ];
 
   List<Map<String, dynamic>> coursesWithInstructors = [];
@@ -47,7 +44,6 @@ class _BookingPageState extends State<BookingPage> {
   void initState() {
     super.initState();
     _loadData();
-    // Initialize your existing Notification Service
     NotificationService().initialize();
   }
 
@@ -69,7 +65,6 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-  // --- Logic: Check Availability ---
   Future<void> _fetchBusySlots() async {
     if (selectedInstructorId == null) return;
     setState(() => isCheckingSlots = true);
@@ -92,35 +87,24 @@ class _BookingPageState extends State<BookingPage> {
     }
   }
 
-  // --- Logic: GPS ---
   Future<void> _selectNearestStudio() async {
     try {
       _showSnackBar("Detecting your location...", Colors.blue);
-
-      // 1. Check if the phone's GPS is actually turned on
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        _showSnackBar("Please turn on your phone's GPS/Location Services.", Colors.orange);
+        _showSnackBar("Please turn on your phone's GPS.", Colors.orange);
         return;
       }
 
-      // 2. Check app permissions
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
-        // Ask the user for permission
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          _showSnackBar("Location permission denied. Cannot find nearest studio.", Colors.red);
+          _showSnackBar("Permission denied.", Colors.red);
           return;
         }
       }
 
-      if (permission == LocationPermission.deniedForever) {
-        _showSnackBar("Location permissions are permanently denied in your phone settings.", Colors.red);
-        return;
-      }
-
-      // 3. If permissions are granted, get the location
       Position position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
 
@@ -138,19 +122,64 @@ class _BookingPageState extends State<BookingPage> {
 
       setState(() => selectedStudioId = closestId);
       _showSnackBar("Nearest studio selected!", Colors.green);
-
     } catch (e) {
       _showSnackBar("Location Error: $e", Colors.red);
     }
   }
 
-  // --- Popup Dialog ---
+  Future<void> _submitBooking() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null || _selectedTime == null) return;
+
+      final DateFormat df = DateFormat("HH:mm:ss");
+      String endTime = df.format(df.parse(_selectedTime!).add(const Duration(hours: 1)));
+
+      final studio = studios.firstWhere((s) => s['id'] == selectedStudioId);
+      final course = coursesWithInstructors.firstWhere((c) => c['course_id'] == selectedCourseId);
+
+      // 1. SAVE TO SUPABASE
+      final response = await supabase.from('booking').insert({
+        'user_id': user.id,
+        'course_id': selectedCourseId,
+        'instructor_id': selectedInstructorId,
+        'booking_date': DateFormat('yyyy-MM-dd').format(selectedDate),
+        'start_time': _selectedTime,
+        'end_time': endTime,
+        'location': studio['name'],
+        'booking_status': 'Confirmed', // UPDATED STATUS
+      }).select();
+
+      if (response.isNotEmpty) {
+        // 2. SCHEDULE NOTIFICATION: 30 MINUTES BEFORE
+        try {
+          String datePart = DateFormat('yyyy-MM-dd').format(selectedDate);
+          DateTime classStart = DateTime.parse("$datePart $_selectedTime");
+
+          await NotificationService().scheduleTaskReminder(
+            bookingId: response[0]['booking_id'].toString(),
+            taskTitle: "Private Class: ${course['course_name']}",
+            taskDateTime: classStart,
+            minutesBefore: 1, // UPDATED FROM 5 TO 30
+          );
+        } catch (e) {
+          debugPrint("Notification Error: $e");
+        }
+
+        if (!mounted) return;
+        Navigator.push(context, MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])));
+      }
+    } catch (e) {
+      _showSnackBar("Booking failed: $e", Colors.red);
+    }
+  }
+
   Future<void> _showConfirmationDialog() async {
     final course = coursesWithInstructors.firstWhere((c) => c['course_id'] == selectedCourseId);
     final instructor = displayedInstructors.firstWhere((i) => i['instructor_id'] == selectedInstructorId);
     final studio = studios.firstWhere((s) => s['id'] == selectedStudioId);
 
-    final bool? confirm = await showDialog(
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E2C),
@@ -167,74 +196,18 @@ class _BookingPageState extends State<BookingPage> {
           ],
         ),
         actions: [
-          Row(
-            children: [
-              Expanded(child: TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("NO", style: TextStyle(color: Colors.white54)))),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9D59FF)),
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text("YES", style: TextStyle(color: Colors.white)),
-                ),
-              ),
-            ],
-          )
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCEL", style: TextStyle(color: Colors.white38))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9D59FF)),
+            onPressed: () {
+              Navigator.pop(context);
+              _submitBooking();
+            },
+            child: const Text("CONFIRM", style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );
-
-    if (confirm == true) _submitBooking();
-  }
-
-  Widget _buildDialogRow(String label, String val) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))),
-        Expanded(child: Text(": $val", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)))
-      ])
-  );
-
-  Future<void> _submitBooking() async {
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null || _selectedTime == null) return;
-
-      final DateFormat df = DateFormat("HH:mm:ss");
-      String endTime = df.format(df.parse(_selectedTime!).add(const Duration(hours: 1)));
-
-      final studio = studios.firstWhere((s) => s['id'] == selectedStudioId);
-      final String studioName = studio['name'];
-      final course = coursesWithInstructors.firstWhere((c) => c['course_id'] == selectedCourseId);
-
-      final response = await supabase.from('booking').insert({
-        'user_id': user.id,
-        'course_id': selectedCourseId,
-        'instructor_id': selectedInstructorId,
-        'booking_date': DateFormat('yyyy-MM-dd').format(selectedDate),
-        'start_time': _selectedTime,
-        'end_time': endTime,
-        'location': studioName,
-        'booking_status': 'Confirmed',
-      }).select();
-
-      if (response.isNotEmpty) {
-        String bookingIdStr = response[0]['booking_id'].toString();
-
-        // 2. USE YOUR EXISTING SERVICE METHOD to schedule the reminder
-        DateTime classStart = DateTime.parse("${DateFormat('yyyy-MM-dd').format(selectedDate)} $_selectedTime");
-        await NotificationService().scheduleTaskReminder(
-          bookingId: bookingIdStr,
-          taskTitle: course['course_name'],
-          taskDateTime: classStart,
-          minutesBefore: 5,
-        );
-
-        if (!mounted) return;
-        Navigator.push(context, MaterialPageRoute(builder: (context) => Payment(bookingId: response[0]['booking_id'])));
-      }
-    } catch (e) {
-      _showSnackBar("Booking failed: $e", Colors.red);
-    }
   }
 
   @override
@@ -262,14 +235,8 @@ class _BookingPageState extends State<BookingPage> {
             const SizedBox(height: 32),
             _sectionTitle("5. Available Times"),
             _buildTimeWrap(),
-
-            // --- NEW NOTE ADDED HERE ---
             const SizedBox(height: 12),
-            Text(
-                "* Note: The duration of the class is only 1 hour.",
-                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontStyle: FontStyle.italic)
-            ),
-
+            Text("* Note: The duration of the class is 1 hour.", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontStyle: FontStyle.italic)),
             const SizedBox(height: 48),
             SizedBox(
               width: double.infinity, height: 56,
@@ -288,58 +255,25 @@ class _BookingPageState extends State<BookingPage> {
   Widget _buildTimeWrap() {
     if (selectedInstructorId == null) return const Text("Please select an instructor", style: TextStyle(color: Colors.white54));
     if (isCheckingSlots) return const CircularProgressIndicator(color: Color(0xFF9D59FF));
-
     final now = DateTime.now();
-    // Check if the selected date is today
-    bool isToday = selectedDate.year == now.year &&
-        selectedDate.month == now.month &&
-        selectedDate.day == now.day;
+    bool isToday = selectedDate.year == now.year && selectedDate.month == now.month && selectedDate.day == now.day;
 
     return Wrap(
       spacing: 10, runSpacing: 10,
       children: _allTimeSlots.map((time) {
-
         bool isBooked = busySlots.contains(time);
         bool isPast = false;
-
-        // If the date is today, check if the time slot has already passed
         if (isToday) {
-          try {
-            final timeParts = time.split(':');
-            final hour = int.parse(timeParts[0]);
-            final minute = int.parse(timeParts[1]);
-
-            final slotDateTime = DateTime(
-                selectedDate.year,
-                selectedDate.month,
-                selectedDate.day,
-                hour,
-                minute
-            );
-
-            if (slotDateTime.isBefore(now)) {
-              isPast = true;
-            }
-          } catch (e) {
-            debugPrint("Error parsing time: $e");
-          }
+          final t = time.split(':');
+          final slot = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, int.parse(t[0]), int.parse(t[1]));
+          if (slot.isBefore(now)) isPast = true;
         }
-
-        // The slot is unavailable if it's already booked OR if it's in the past
         bool isUnavailable = isBooked || isPast;
-
         return ChoiceChip(
-          label: Text(
-              time.substring(0, 5),
-              style: TextStyle(
-                  color: isUnavailable ? Colors.white24 : Colors.white,
-                  decoration: isUnavailable ? TextDecoration.lineThrough : null
-              )
-          ),
+          label: Text(time.substring(0, 5), style: TextStyle(color: isUnavailable ? Colors.white24 : Colors.white, decoration: isUnavailable ? TextDecoration.lineThrough : null)),
           selected: _selectedTime == time,
           selectedColor: const Color(0xFF9D59FF),
           backgroundColor: const Color(0xFF1E1E2C),
-          disabledColor: Colors.red.withOpacity(0.05),
           onSelected: isUnavailable ? null : (selected) => setState(() => _selectedTime = selected ? time : null),
         );
       }).toList(),
@@ -402,12 +336,8 @@ class _BookingPageState extends State<BookingPage> {
     );
   }
 
-  // --- Helper Widgets ---
-  Widget _iconButton(IconData i, Function() onTap) => Container(
-      decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12)),
-      child: IconButton(icon: Icon(i, color: const Color(0xFF9D59FF)), onPressed: onTap)
-  );
-
+  Widget _buildDialogRow(String label, String val) => Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Row(children: [SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13))), Expanded(child: Text(": $val", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)))]));
+  Widget _iconButton(IconData i, Function() onTap) => Container(decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(12)), child: IconButton(icon: Icon(i, color: const Color(0xFF9D59FF)), onPressed: onTap));
   Widget _sectionTitle(String text) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)));
   InputDecoration _inputDecoration() => InputDecoration(filled: true, fillColor: const Color(0xFF1E1E2C), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none));
   void _showSnackBar(String m, Color c) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: c));
@@ -425,7 +355,7 @@ class StudioMapScreen extends StatelessWidget {
       body: GoogleMap(
         myLocationEnabled: true, initialCameraPosition: CameraPosition(target: LatLng(studios[0]['lat'], studios[0]['lng']), zoom: 10),
         markers: studios.map((s) => Marker(
-          markerId: MarkerId(s['id']), position: LatLng(s['lat'], s['lng']), icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          markerId: MarkerId(s['id']), position: LatLng(s['lat'], s['lng']),
           infoWindow: InfoWindow(title: s['name'], snippet: s['address'], onTap: () { onStudioSelected(s['id']); Navigator.pop(context); }),
         )).toSet(),
       ),
