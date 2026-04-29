@@ -17,7 +17,8 @@ class _PublicUpdateState extends State<PublicUpdate> {
   @override
   void initState() {
     super.initState();
-    // Check if the booking is already cancelled in the database
+    // Logic updated: If status is 'Cancelled', lock the UI.
+    // Otherwise, it is considered 'Confirm' (Active).
     if (widget.booking['booking_status']?.toString().toLowerCase() == 'cancelled') {
       isCancelled = true;
     }
@@ -27,7 +28,6 @@ class _PublicUpdateState extends State<PublicUpdate> {
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return "-";
     try {
-      // Takes '14:30:00' and returns '14:30'
       return time.substring(0, 5);
     } catch (e) {
       return time;
@@ -42,7 +42,7 @@ class _PublicUpdateState extends State<PublicUpdate> {
         backgroundColor: const Color(0xFF1E1E2C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Cancel Class", style: TextStyle(color: Colors.white)),
-        content: const Text("Are you sure you want to cancel your spot in this class? This cannot be undone."),
+        content: const Text("Are you sure you want to cancel your spot? This cannot be undone."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -58,16 +58,15 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
     if (confirm == true) {
       try {
-        // 1. Get the current user
         final user = supabase.auth.currentUser;
         if (user == null) return;
 
-        // 2. Update with double-verification (ID + User)
+        // Updates status to Cancelled
         await supabase
             .from('booking')
             .update({'booking_status': 'Cancelled'})
             .eq('booking_id', widget.booking['booking_id'])
-            .eq('user_id', user.id); // <--- ADD THIS SECURITY CHECK
+            .eq('user_id', user.id);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -91,7 +90,6 @@ class _PublicUpdateState extends State<PublicUpdate> {
     DateTime date = DateTime.parse(widget.booking['booking_date']);
     String formattedDate = DateFormat('EEEE, d MMMM yyyy').format(date);
 
-    // Format Times
     String startTime = _formatTime(widget.booking['start_time']);
     String endTime = _formatTime(widget.booking['end_time']);
 
@@ -109,10 +107,8 @@ class _PublicUpdateState extends State<PublicUpdate> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- CANCELLED INDICATOR ---
             if (isCancelled) _buildStatusBanner(dangerColor),
 
-            // 1. COURSE INFORMATION
             _sectionLabel("COURSE INFORMATION"),
             _buildDetailTile(Icons.auto_awesome, "Class Name", widget.booking['courses']?['course_name'] ?? "Public Class", accentColor),
             const SizedBox(height: 12),
@@ -120,22 +116,20 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
             const SizedBox(height: 32),
 
-            // 2. LOCATION
             _sectionLabel("LOCATION"),
             _buildDetailTile(Icons.location_on_outlined, "Studio Location", widget.booking['location'] ?? "Main Studio", accentColor),
 
             const SizedBox(height: 32),
 
-            // 3. TIME & SCHEDULE
             _sectionLabel("TIME & SCHEDULE"),
             _buildDetailTile(Icons.calendar_today_outlined, "Date", formattedDate, accentColor),
             const SizedBox(height: 12),
-            // Updated time format here
             _buildDetailTile(Icons.access_time, "Time Slot", "$startTime - $endTime", accentColor),
 
             const SizedBox(height: 60),
 
-            // --- ACTION BUTTON ---
+            // ACTION BUTTON: Only shows if NOT cancelled.
+            // Works for bookings with status 'Confirm'
             if (!isCancelled)
               SizedBox(
                 width: double.infinity,
