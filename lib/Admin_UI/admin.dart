@@ -308,6 +308,7 @@ class _AdminState extends State<Admin> {
     required String topClassName,
     required int maxBooking,
     required double avgRevenue,
+    required Map<String, int> courseCount,
   }) async {
     final pdf = pw.Document();
 
@@ -341,6 +342,37 @@ class _AdminState extends State<Admin> {
                 reportRow("Top Class", topClassName),
                 reportRow("Peak Booking", "$maxBooking bookings"),
                 reportRow("Average Revenue", "RM ${avgRevenue.toStringAsFixed(2)}"),
+
+                pw.SizedBox(height: 20),
+
+                pw.Text(
+                  "Detailed Booking Classes",
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+
+                pw.SizedBox(height: 10),
+
+                pw.TableHelper.fromTextArray(
+                  headers: ["Class Name", "Booking Count"],
+                  data: courseCount.entries.map((entry) {
+                    final course = courses.firstWhere(
+                          (c) => c['course_id'].toString() == entry.key,
+                      orElse: () => {},
+                    );
+
+                    final courseName = course.isNotEmpty
+                        ? course['course_name'].toString()
+                        : "Course ${entry.key}";
+
+                    return [
+                      courseName,
+                      entry.value.toString(),
+                    ];
+                  }).toList(),
+                ),
               ],
             ),
           );
@@ -1566,7 +1598,7 @@ class _AdminState extends State<Admin> {
         ),
         content: SizedBox(
           width: double.maxFinite,
-          height: 340,
+          height: 420,
           child: bookingChart(courseCount),
         ),
         actions: [
@@ -1582,6 +1614,11 @@ class _AdminState extends State<Admin> {
   Widget analyticsPage() {
     double totalRevenue = 0;
 
+    final validBookings = bookings.where((b) {
+      final status = b['booking_status']?.toString().toLowerCase() ?? '';
+      return status == 'confirmed' || status == 'attended';
+    }).toList();
+
     for (final p in payments) {
       totalRevenue += double.tryParse(p['amount']?.toString() ?? '0') ?? 0;
     }
@@ -1591,8 +1628,15 @@ class _AdminState extends State<Admin> {
 
     final Map<String, int> courseCount = {};
 
-    for (final b in bookings) {
+    for (final b in validBookings) {
+      final status = b['booking_status']?.toString().toLowerCase() ?? '';
+
+      if (status != 'confirmed' && status != 'attended') {
+        continue;
+      }
+
       final courseId = b['course_id']?.toString() ?? '';
+
       if (courseId.isNotEmpty) {
         courseCount[courseId] = (courseCount[courseId] ?? 0) + 1;
       }
@@ -1616,7 +1660,7 @@ class _AdminState extends State<Admin> {
       }
     });
 
-    final avgRevenue = bookings.isEmpty ? 0 : totalRevenue / bookings.length;
+    final avgRevenue = validBookings.isEmpty ? 0 : totalRevenue / validBookings.length;
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(16),
@@ -1651,6 +1695,7 @@ class _AdminState extends State<Admin> {
                 topClassName: topClassName,
                 maxBooking: maxBooking,
                 avgRevenue: avgRevenue.toDouble(),
+                courseCount: courseCount,
               );
             },
             child: Container(
@@ -1708,7 +1753,7 @@ class _AdminState extends State<Admin> {
                 },
                 child: statCard(
                   "Total Bookings",
-                  bookings.length.toString(),
+                  validBookings.length.toString(),
                   Icons.event,
                 ),
               ),
@@ -1739,27 +1784,6 @@ class _AdminState extends State<Admin> {
             ],
           ),
 
-          SizedBox(height: 20),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF9D59FF),
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              onPressed: () {
-                showBookingChartDialog(courseCount);
-              },
-              icon: Icon(Icons.bar_chart),
-              label: Text("View Chart"),
-            ),
-          ),
-
           SizedBox(height: 12),
 
           SizedBox(
@@ -1782,6 +1806,7 @@ class _AdminState extends State<Admin> {
                   topClassName: topClassName,
                   maxBooking: maxBooking,
                   avgRevenue: avgRevenue.toDouble(),
+                  courseCount: courseCount,
                 );
               },
               icon: Icon(Icons.picture_as_pdf),
@@ -1919,120 +1944,96 @@ class _AdminState extends State<Admin> {
 
   Widget bookingChart(Map<String, int> courseCount) {
     if (courseCount.isEmpty) {
-      return adminCard(
-        child: Center(
-          child: Text(
-            "No booking data",
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
+      return Center(
+        child: Text("No booking data", style: TextStyle(color: Colors.grey)),
       );
     }
 
     final entries = courseCount.entries.toList();
+    final total = entries.fold<int>(0, (sum, e) => sum + e.value);
 
-    return Container(
-      height: 320,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: BarChart(
-        BarChartData(
-          minY: 0,
-          borderData: FlBorderData(
-            show: true,
-            border: Border(
-              left: BorderSide(color: Colors.grey),
-              bottom: BorderSide(color: Colors.grey),
+    final colors = [
+      Color(0xFF9D59FF),
+      Color(0xFFC7A6FF),
+      Color(0xFF7B3FE4),
+      Color(0xFFB983FF),
+      Color(0xFF5E35B1),
+    ];
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 240,
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 3,
+              centerSpaceRadius: 45,
+              sections: List.generate(entries.length, (index) {
+                final entry = entries[index];
+                final percent = total == 0 ? 0 : (entry.value / total) * 100;
+
+                return PieChartSectionData(
+                  color: colors[index % colors.length],
+                  value: entry.value.toDouble(),
+                  title: "${percent.toStringAsFixed(0)}%\n${entry.value}",
+                  radius: 85,
+                  titleStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              }),
             ),
           ),
-          gridData: FlGridData(show: true),
+        ),
 
-          titlesData: FlTitlesData(
-            leftTitles: AxisTitles(
-              axisNameWidget: Text(
-                "Bookings",
-                style: TextStyle(color: Colors.grey, fontSize: 11),
-              ),
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 32,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    value.toInt().toString(),
-                    style: TextStyle(color: Colors.grey, fontSize: 10),
-                  );
-                },
-              ),
-            ),
+        SizedBox(height: 16),
 
-            bottomTitles: AxisTitles(
-              axisNameWidget: Text(
-                "Classes",
-                style: TextStyle(color: Colors.grey, fontSize: 11),
-              ),
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 45,
-                getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
+        Column(
+          children: List.generate(entries.length, (index) {
+            final entry = entries[index];
+            final percent = total == 0 ? 0 : (entry.value / total) * 100;
 
-                  if (index < 0 || index >= entries.length) {
-                    return SizedBox.shrink();
-                  }
+            final course = courses.firstWhere(
+                  (c) => c['course_id'].toString() == entry.key,
+              orElse: () => {},
+            );
 
-                  final courseId = entries[index].key;
+            final courseName = course.isNotEmpty
+                ? course['course_name'].toString()
+                : "Course ${entry.key}";
 
-                  final course = courses.firstWhere(
-                        (c) => c['course_id'].toString() == courseId,
-                    orElse: () => {},
-                  );
-
-                  final courseName = course.isNotEmpty
-                      ? course['course_name'].toString()
-                      : "C$courseId";
-
-                  final shortName = courseName.length > 6
-                      ? courseName.substring(0, 6)
-                      : courseName;
-
-                  return Padding(
-                    padding: EdgeInsets.only(top: 6),
+            return Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: colors[index % colors.length],
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
-                      shortName,
-                      style: TextStyle(color: Colors.grey, fontSize: 10),
+                      courseName,
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
                       overflow: TextOverflow.ellipsis,
                     ),
-                  );
-                },
+                  ),
+                  Text(
+                    "${entry.value} bookings • ${percent.toStringAsFixed(0)}%",
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
               ),
-            ),
-
-            topTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-
-            rightTitles: AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-          ),
-
-          barGroups: List.generate(entries.length, (index) {
-            return BarChartGroupData(
-              x: index,
-              barRods: [
-                BarChartRodData(
-                  toY: entries[index].value.toDouble(),
-                  width: 16,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ],
             );
           }),
         ),
-      ),
+      ],
     );
   }
 
