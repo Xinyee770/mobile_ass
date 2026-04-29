@@ -96,6 +96,31 @@ class _BookingPageState extends State<BookingPage> {
   Future<void> _selectNearestStudio() async {
     try {
       _showSnackBar("Detecting your location...", Colors.blue);
+
+      // 1. Check if the phone's GPS is actually turned on
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showSnackBar("Please turn on your phone's GPS/Location Services.", Colors.orange);
+        return;
+      }
+
+      // 2. Check app permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        // Ask the user for permission
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showSnackBar("Location permission denied. Cannot find nearest studio.", Colors.red);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showSnackBar("Location permissions are permanently denied in your phone settings.", Colors.red);
+        return;
+      }
+
+      // 3. If permissions are granted, get the location
       Position position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
 
@@ -110,10 +135,12 @@ class _BookingPageState extends State<BookingPage> {
           closestId = studio['id'];
         }
       }
+
       setState(() => selectedStudioId = closestId);
       _showSnackBar("Nearest studio selected!", Colors.green);
+
     } catch (e) {
-      _showSnackBar("Location Error. Check GPS settings.", Colors.red);
+      _showSnackBar("Location Error: $e", Colors.red);
     }
   }
 
@@ -235,6 +262,14 @@ class _BookingPageState extends State<BookingPage> {
             const SizedBox(height: 32),
             _sectionTitle("5. Available Times"),
             _buildTimeWrap(),
+
+            // --- NEW NOTE ADDED HERE ---
+            const SizedBox(height: 12),
+            Text(
+                "* Note: The duration of the class is only 1 hour.",
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12, fontStyle: FontStyle.italic)
+            ),
+
             const SizedBox(height: 48),
             SizedBox(
               width: double.infinity, height: 56,
@@ -254,17 +289,58 @@ class _BookingPageState extends State<BookingPage> {
     if (selectedInstructorId == null) return const Text("Please select an instructor", style: TextStyle(color: Colors.white54));
     if (isCheckingSlots) return const CircularProgressIndicator(color: Color(0xFF9D59FF));
 
+    final now = DateTime.now();
+    // Check if the selected date is today
+    bool isToday = selectedDate.year == now.year &&
+        selectedDate.month == now.month &&
+        selectedDate.day == now.day;
+
     return Wrap(
       spacing: 10, runSpacing: 10,
       children: _allTimeSlots.map((time) {
+
         bool isBooked = busySlots.contains(time);
+        bool isPast = false;
+
+        // If the date is today, check if the time slot has already passed
+        if (isToday) {
+          try {
+            final timeParts = time.split(':');
+            final hour = int.parse(timeParts[0]);
+            final minute = int.parse(timeParts[1]);
+
+            final slotDateTime = DateTime(
+                selectedDate.year,
+                selectedDate.month,
+                selectedDate.day,
+                hour,
+                minute
+            );
+
+            if (slotDateTime.isBefore(now)) {
+              isPast = true;
+            }
+          } catch (e) {
+            debugPrint("Error parsing time: $e");
+          }
+        }
+
+        // The slot is unavailable if it's already booked OR if it's in the past
+        bool isUnavailable = isBooked || isPast;
+
         return ChoiceChip(
-          label: Text(time.substring(0, 5), style: TextStyle(color: isBooked ? Colors.white24 : Colors.white, decoration: isBooked ? TextDecoration.lineThrough : null)),
+          label: Text(
+              time.substring(0, 5),
+              style: TextStyle(
+                  color: isUnavailable ? Colors.white24 : Colors.white,
+                  decoration: isUnavailable ? TextDecoration.lineThrough : null
+              )
+          ),
           selected: _selectedTime == time,
           selectedColor: const Color(0xFF9D59FF),
           backgroundColor: const Color(0xFF1E1E2C),
           disabledColor: Colors.red.withOpacity(0.05),
-          onSelected: isBooked ? null : (selected) => setState(() => _selectedTime = selected ? time : null),
+          onSelected: isUnavailable ? null : (selected) => setState(() => _selectedTime = selected ? time : null),
         );
       }).toList(),
     );
