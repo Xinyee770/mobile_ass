@@ -48,7 +48,6 @@ class MainDrawer extends StatelessWidget {
                 _tile(Icons.account_balance_wallet_outlined, 'My Transactions', destination: 'finance'),
                 _tile(Icons.calendar_view_day_outlined, 'My Timetable', destination: 'timetable'),
 
-                // We keep your exact ExpansionTiles here
                 _buildExpansionSection(
                   icon: Icons.calendar_month_outlined,
                   title: 'Book a Class',
@@ -200,7 +199,6 @@ class MainDrawer extends StatelessWidget {
 
   // A simple mapper to keep navigation clean
   Widget _getWidgetFromKey(String key) {
-    // Note: You'll need to import these in THIS file too
     switch (key) {
       case 'profile': return const Profile();
       case 'topup': return const WalletTopUp();

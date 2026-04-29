@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart'; // IMPORT THIS
+import 'package:fl_chart/fl_chart.dart';
 import '../services/wallet_service.dart';
 import 'package:intl/intl.dart';
 
@@ -120,7 +120,7 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
     );
   }
 
-// Your exact original UI wrapped in a method
+
   Widget _buildOriginalCashFlow(double totalCredits, double totalDebits, int creditCount, int debitCount, ColorScheme theme) {
     double totalFlow = totalCredits + totalDebits;
 
@@ -497,7 +497,7 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
 
           const Spacer(),
           Text(
-            "Based on ${total.toInt()} total transactions.", // Changed RM to transactions
+            "Based on ${total.toInt()} total transactions.",
             style: const TextStyle(color: Colors.white10, fontSize: 10),
           )
         ],

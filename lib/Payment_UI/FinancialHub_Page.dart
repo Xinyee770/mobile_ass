@@ -13,10 +13,9 @@ class FinancialHubPage extends StatefulWidget {
 class _FinancialHubPageState extends State<FinancialHubPage> {
   int _currentIndex = 0;
 
-  // The two pages you are combining
   final List<Widget> _pages = [
-    const PaymentHistoryPage(), // Your existing page
-    const WalletTransactionHistory(),  // Your wallet specific page
+    const PaymentHistoryPage(),
+    const WalletTransactionHistory(),
   ];
 
   @override

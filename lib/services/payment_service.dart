@@ -12,7 +12,6 @@ class PaymentService {
   // ---------------------------------------------------------
   // 1. GLOBAL TEST CONFIGURATION
   // ---------------------------------------------------------
-  // Hardcode your test user ID here once.
   // This gets the ID of the person currently logged into the app
   String get _userId {
     final user = _supabase.auth.currentUser;

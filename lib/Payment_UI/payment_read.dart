@@ -236,7 +236,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
       bool payMatch = _filterStatus == 'All' ||
           item['status'].toString().toLowerCase() == _filterStatus.toLowerCase();
 
-      // Row 2: Booking Status Filter (Now including "Paid")
+      // Row 2: Booking Status Filter
       String bStatus = (item['booking']['booking_status'] ?? '').toString().toLowerCase();
       String pStatus = (item['status'] ?? '').toString().toLowerCase();
 
@@ -302,7 +302,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  // --- 1. Updated Card (IDs REMOVED) ---
+  // --- 1. Updated Card ---
   Widget _buildTransactionCard(Map<String, dynamic> item) {
     final status = item['status'].toString().toLowerCase();
     final booking = item['booking'];
@@ -390,7 +390,7 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
     );
   }
 
-  // --- 2. Fixed Metadata Function (IDs REMOVED) ---
+  // --- 2. Fixed Metadata Function ---
   Widget _buildCardMetadata(Map<String, dynamic> item) {
     String paymentDate = "N/A";
     if (item['created_at'] != null) {
@@ -672,18 +672,6 @@ class _PaymentHistoryPageState extends State<PaymentHistoryPage> {
           Text(label, style: TextStyle(color: textMuted)),
           Text(value, style: TextStyle(color: valueColor ?? Colors.white, fontWeight: FontWeight.w500)),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDarkTextField(String label, String hint, IconData icon) {
-    return TextField(
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label, labelStyle: TextStyle(color: textMuted), hintText: hint, hintStyle: const TextStyle(color: Colors.white10),
-        prefixIcon: Icon(icon, color: primaryPurple, size: 20), filled: true, fillColor: bgDark,
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.white10)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryPurple)),
       ),
     );
   }
