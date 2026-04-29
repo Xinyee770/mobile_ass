@@ -24,17 +24,16 @@ class _TimetablePageState extends State<TimetablePage> {
     _fetchBookings();
   }
 
-  // --- DATABASE: Fetch dynamic records for the logged-in user ---
   Future<void> _fetchBookings() async {
     try {
       final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      // Filter by the dynamic UUID (user.id)
       final response = await supabase
           .from('booking')
           .select('*, courses(course_name), instructor(instructor_name)')
           .eq('user_id', user.id)
+          .neq('booking_status', 'Cancelled')
           .order('start_time', ascending: true);
 
       setState(() {
@@ -47,11 +46,9 @@ class _TimetablePageState extends State<TimetablePage> {
     }
   }
 
-  // --- PDF: Dynamic Generation based on your actual records ---
+  // --- PDF: Generation ---
   Future<void> _generatePDF() async {
     final pdf = pw.Document();
-
-    // Sort bookings by date for the PDF report
     final sortedBookings = List.from(allBookings);
     sortedBookings.sort((a, b) => (a['booking_date'] ?? "").compareTo(b['booking_date'] ?? ""));
 
@@ -96,7 +93,6 @@ class _TimetablePageState extends State<TimetablePage> {
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 
-  // Helper to prevent crashes if time is null or short
   String _safeTime(dynamic time) {
     if (time == null || time.toString().length < 5) return "--:--";
     return time.toString().substring(0, 5);
@@ -117,9 +113,9 @@ class _TimetablePageState extends State<TimetablePage> {
             const SizedBox(height: 15),
             const Text("Note:", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            _buildInfoItem("1.", "You can download your actual booking history as a PDF."),
+            _buildInfoItem("1.", "You can download your current active bookings as a PDF."),
             const SizedBox(height: 12),
-            _buildInfoItem("2.", "Only confirmed and upcoming classes are shown."),
+            _buildInfoItem("2.", "Cancelled classes are automatically hidden."),
             const SizedBox(height: 25),
             SizedBox(
               width: double.infinity,
@@ -229,7 +225,7 @@ class _TimetablePageState extends State<TimetablePage> {
         ),
         const SizedBox(height: 30),
         if (filteredBookings.isEmpty)
-          const Center(child: Padding(padding: EdgeInsets.only(top: 50), child: Text("No bookings for this date", style: TextStyle(color: Colors.white24))))
+          const Center(child: Padding(padding: EdgeInsets.only(top: 50), child: Text("No active bookings for this date", style: TextStyle(color: Colors.white24))))
         else
           ...filteredBookings.map((booking) => _buildTimelineItem(booking, accent)).toList(),
       ],
@@ -259,7 +255,7 @@ class _TimetablePageState extends State<TimetablePage> {
               decoration: BoxDecoration(color: const Color(0xFF1E1E2C), borderRadius: BorderRadius.circular(15)),
               child: Row(
                 children: [
-                  CircleAvatar(radius: 14, backgroundColor: accent.withOpacity(0.15), child: Text("D", style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.bold))),
+                  CircleAvatar(radius: 14, backgroundColor: accent.withOpacity(0.15), child: Text((booking['courses']?['course_name']?[0] ?? 'C'), style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.bold))),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

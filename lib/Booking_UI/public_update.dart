@@ -17,14 +17,11 @@ class _PublicUpdateState extends State<PublicUpdate> {
   @override
   void initState() {
     super.initState();
-    // Logic updated: If status is 'Cancelled', lock the UI.
-    // Otherwise, it is considered 'Confirm' (Active).
     if (widget.booking['booking_status']?.toString().toLowerCase() == 'cancelled') {
       isCancelled = true;
     }
   }
 
-  // Helper to format time strings (HH:mm:ss -> HH:mm)
   String _formatTime(String? time) {
     if (time == null || time.isEmpty) return "-";
     try {
@@ -128,8 +125,6 @@ class _PublicUpdateState extends State<PublicUpdate> {
 
             const SizedBox(height: 60),
 
-            // ACTION BUTTON: Only shows if NOT cancelled.
-            // Works for bookings with status 'Confirm'
             if (!isCancelled)
               SizedBox(
                 width: double.infinity,
@@ -158,7 +153,6 @@ class _PublicUpdateState extends State<PublicUpdate> {
   }
 
   // --- UI COMPONENTS ---
-
   Widget _sectionLabel(String text) => Padding(
     padding: const EdgeInsets.only(left: 4, bottom: 12),
     child: Text(text, style: const TextStyle(color: Colors.white30, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.1)),

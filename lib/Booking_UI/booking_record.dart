@@ -86,13 +86,10 @@ class _PrivateBookingRecordState extends State<BookingRecord> {
                 minute,
               );
 
-              // If current time is past class end time, update to MISSED
               if (now.isAfter(classEndDateTime)) {
 
-                // Update UI state locally (works now because of Map.from above)
                 booking['booking_status'] = 'MISSED';
 
-                // Update DB in background
                 final bookingId = booking['booking_id'] ?? booking['id'];
                 if (bookingId != null) {
                   supabase
