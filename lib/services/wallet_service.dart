@@ -10,8 +10,6 @@ class WalletService {
   String get _userId {
     final user = _supabase.auth.currentUser;
     if (user == null) {
-      // For testing, you could temporarily return a real UUID string here
-      // if you aren't logged in yet.
       return "";
     }
     return user.id; // This is the UUID from Supabase Auth
@@ -21,7 +19,7 @@ class WalletService {
   // 2. BALANCE OPERATIONS
   // ---------------------------------------------------------
 
-  // Get current balance from your ACTUAL 'wallets' table
+  // Get current balance from 'wallets' table
   Future<double> getBalance() async {
     try {
       if (_userId.isEmpty) return 0.0;
@@ -236,14 +234,14 @@ class WalletService {
 
   Future<List<Map<String, dynamic>>> getRawPayments() async {
     try {
-      // Get the current user ID just like you did in the PaymentService
+      // Get the current user ID
       final user = _supabase.auth.currentUser;
       if (user == null) return [];
 
       final response = await _supabase
           .from('payment')
           .select('payment_method, amount')
-          .eq('user_id', user.id) // <--- ADD THIS FILTER HERE
+          .eq('user_id', user.id)
           .eq('status', 'paid');
 
       return List<Map<String, dynamic>>.from(response);

@@ -51,7 +51,7 @@ class _PaymentState extends State<Payment> {
         return;
       }
 
-      // B. Your Authorization (KEEP THIS EXACTLY AS IS)
+      // B. Authorization
       bool canCheck = await auth.canCheckBiometrics;
       bool isSupported = await auth.isDeviceSupported();
       if (canCheck || isSupported) {
@@ -78,7 +78,7 @@ class _PaymentState extends State<Payment> {
         }
       }
 
-      // D. Finalize record (same as before)
+      // D. Finalize record
       await _service.completePayment(
         paymentId: _pendingPaymentId!,
         bookingId: widget.bookingId,
