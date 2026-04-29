@@ -244,6 +244,52 @@ class _AdminState extends State<Admin> {
     return true;
   }
 
+  bool validateUser({
+    required TextEditingController name,
+    required TextEditingController email,
+    required TextEditingController passes,
+  }) {
+    final nameText = name.text.trim();
+    final emailText = email.text.trim();
+    final passesText = passes.text.trim();
+
+    final nameRegex = RegExp(r'^[a-zA-Z ]+$');
+    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
+    final numberRegex = RegExp(r'^[0-9]+$');
+
+    if (nameText.isEmpty) {
+      showMsg("Please enter name");
+      return false;
+    }
+
+    if (emailText.isEmpty) {
+      showMsg("Please enter email");
+      return false;
+    }
+
+    if (!emailRegex.hasMatch(emailText)) {
+      showMsg("Invalid email format");
+      return false;
+    }
+
+    if (passesText.isEmpty) {
+      showMsg("Please enter passes");
+      return false;
+    }
+
+    if (!numberRegex.hasMatch(passesText)) {
+      showMsg("Passes must be a number");
+      return false;
+    }
+
+    if (int.parse(passesText) < 0) {
+      showMsg("Passes cannot be negative");
+      return false;
+    }
+
+    return true;
+  }
+
   // =========================
   // DATE AND TIME FUNCTIONS
   // =========================
@@ -853,6 +899,13 @@ class _AdminState extends State<Admin> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: accent),
             onPressed: () async {
+              if (!validateUser(
+                name: name,
+                email: email,
+                passes: passes,
+              )) {
+                return;
+              }
               try {
                 await supabase
                     .from('profiles')
@@ -866,7 +919,7 @@ class _AdminState extends State<Admin> {
                 Navigator.pop(dialogContext);
                 await loadData();
 
-                showMsg("Member updated successfully", color: Colors.green);
+                showMsg("User updated successfully", color: Colors.green);
               } catch (e) {
                 showMsg("Update failed: $e");
               }
