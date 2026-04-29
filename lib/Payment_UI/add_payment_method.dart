@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/wallet_service.dart';
+import 'package:flutter/services.dart';
 
 class AddPaymentMethodPage extends StatefulWidget {
   final Map<String, dynamic>? existingMethod; // Pass this when editing
@@ -129,32 +130,43 @@ class _AddPaymentMethodPageState extends State<AddPaymentMethodPage> {
               enabled: widget.existingMethod == null,
               style: TextStyle(color: widget.existingMethod == null ? Colors.white : Colors.white38),
               keyboardType: TextInputType.number,
-              decoration: _inputDecoration(_selectedType == 'Credit Card' ? "16-Digit Card Number" : "TNG Phone Number"),
+              inputFormatters: _selectedType == 'Credit Card'
+                  ? [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(16)]
+                  : [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(11)],
+              decoration: _inputDecoration(
+                _selectedType == 'Credit Card' ? "Card Number" : "Phone Number",
+                hint: _selectedType == 'Credit Card' ? "1234 5678 1234 5678" : "0123456789",
+              ),
               validator: (val) {
                 if (val == null || val.isEmpty) return "Field required";
-                if (widget.existingMethod != null) return null; // Skip deep check if editing
-
-                if (_selectedType == 'Credit Card') {
-                  if (val.length != 16) return "Enter exactly 16 digits";
-                } else {
-                  final phoneRegExp = RegExp(r'^(01)[0-46-9]-*[0-9]{7,8}$');
-                  if (!phoneRegExp.hasMatch(val)) return "Invalid MY Phone Number";
-                }
+                if (widget.existingMethod != null) return null;
+                if (_selectedType == 'Credit Card' && val.length != 16) return "Enter 16 digits";
                 return null;
               },
             ),
             const SizedBox(height: 20),
 
-            // 4. EXPIRY
+            // 4. EXPIRY (Simple & Stable Version)
             if (_selectedType == 'Credit Card')
               TextFormField(
                 controller: _expiryController,
-                enabled: true, // Always enabled so user can update the date
                 style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration("Expiry (MM/YY)"),
+                keyboardType: TextInputType.datetime, // Shows a keyboard better for dates
+                inputFormatters: [
+                  // Only allow digits and the slash
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9/]')),
+                  LengthLimitingTextInputFormatter(5), // Limits to "MM/YY" (5 chars)
+                ],
+                decoration: _inputDecoration(
+                    "Expiry Date",
+                    hint: "MM/YY (e.g. 12/28)"
+                ),
                 validator: (val) {
                   if (val == null || val.isEmpty) return "Required";
-                  if (!RegExp(r'^(0[1-9]|1[0-2])\/?([0-9]{2})$').hasMatch(val)) return "Use MM/YY";
+                  // Basic check for the slash position
+                  if (!RegExp(r'^(0[1-9]|1[0-2])\/[0-9]{2}$').hasMatch(val)) {
+                    return "Use MM/YY format";
+                  }
                   return null;
                 },
               ),
@@ -185,9 +197,11 @@ class _AddPaymentMethodPageState extends State<AddPaymentMethodPage> {
     );
   }
 
-  InputDecoration _inputDecoration(String label) {
+  InputDecoration _inputDecoration(String label, {String? hint}) {
     return InputDecoration(
       labelText: label,
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.white10, fontSize: 14),
       labelStyle: const TextStyle(color: Colors.white38, fontSize: 14),
       filled: true,
       fillColor: Colors.white.withOpacity(0.05),

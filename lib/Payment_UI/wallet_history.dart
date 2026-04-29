@@ -15,11 +15,22 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
   late Future<List<Map<String, dynamic>>> _transactionsFuture;
   final PageController _pageController = PageController();
   int _currentPage = 0;
+  List<Map<String, dynamic>> _rawPayments = [];
 
   @override
   void initState() {
     super.initState();
-    _transactionsFuture = _walletService.getTransactionHistory();
+    // Fetch both tables at once
+    _transactionsFuture = Future.wait([
+      _walletService.getTransactionHistory(),
+      _walletService.getRawPayments(),
+    ]).then((results) {
+      // Save the payment table results to our local variable
+      _rawPayments = List<Map<String, dynamic>>.from(results[1]);
+
+      // Return the wallet transactions for the main list
+      return List<Map<String, dynamic>>.from(results[0]);
+    });
   }
 
   @override
@@ -29,12 +40,18 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
   }
 
   Widget _buildSummaryHeader(List<Map<String, dynamic>> data, ColorScheme theme) {
+    // Card 1 & 2 Data (Calculated from transactions list)
     double totalCredits = 0;
     double totalDebits = 0;
     int creditCount = 0;
     int debitCount = 0;
     Map<String, double> categoryMap = {};
 
+    // Card 3 Data (Calculated from raw payments list)
+    int walletCount = 0;
+    int directCount = 0;
+
+    // --- LOOP 1: Process Transaction History for Cards 1 & 2 ---
     for (var item in data) {
       double amt = (item['amount'] ?? 0).toDouble().abs();
       if (item['transaction_type'] == 'credit') {
@@ -43,27 +60,47 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
       } else {
         totalDebits += amt;
         debitCount++;
+        // Category Spending logic
         String cat = item['description'] ?? "Other";
         categoryMap[cat] = (categoryMap[cat] ?? 0) + amt;
       }
     }
 
+    // --- LOOP 2: Process Raw Payments for Card 3 ---
+    for (var payment in _rawPayments) {
+      String method = (payment['payment_method'] ?? "").toString();
+      if (method == "My Wallet") {
+        walletCount++;
+      } else if (method.isNotEmpty) {
+        directCount++;
+      }
+    }
+
+    double walletFinal = walletCount.toDouble();
+    double directFinal = directCount.toDouble();
+
     return Column(
       children: [
         SizedBox(
-          height: 240, // Fixed height for both
+          height: 240,
           child: PageView(
             controller: _pageController,
             onPageChanged: (index) => setState(() => _currentPage = index),
             children: [
-              // Added Padding here to create space between the edge and the card
+              // CARD 1: Cash Flow
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: _buildOriginalCashFlow(totalCredits, totalDebits, creditCount, debitCount, theme),
               ),
+              // CARD 2: Category Spending
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: _buildCategorySpending(categoryMap, totalDebits, theme),
+              ),
+              // CARD 3: Payment Preference
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: _buildPaymentMethodInsights(walletFinal, directFinal, theme),
               ),
             ],
           ),
@@ -74,6 +111,8 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
             _buildDot(0),
             const SizedBox(width: 8),
             _buildDot(1),
+            const SizedBox(width: 8),
+            _buildDot(2),
           ],
         ),
         const SizedBox(height: 10),
@@ -311,7 +350,7 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
                 padding: EdgeInsets.symmetric(horizontal: 24, vertical: 10),
                 child: Align(
                   alignment: Alignment.centerLeft,
-                  child: Text("TRANSACTION LOG",
+                  child: Text("TRANSACTION LOG (WALLET ONLY)",
                       style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 12)),
                 ),
               ),
@@ -420,6 +459,76 @@ class _WalletTransactionHistoryState extends State<WalletTransactionHistory> {
           Text("No transactions yet", style: TextStyle(color: Colors.white38)),
         ],
       ),
+    );
+  }
+
+  Widget _buildPaymentMethodInsights(double walletAmt, double directAmt, ColorScheme theme) {
+    double total = walletAmt + directAmt;
+    double safeTotal = total > 0 ? total : 1;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E2C),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("PAYMENT PREFERENCE", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+          const SizedBox(height: 20),
+
+          _buildMethodBar(
+              "My Wallet",
+              walletAmt / safeTotal,
+              const Color(0xFF9D59FF),
+              Icons.wallet
+          ),
+
+          const SizedBox(height: 20),
+
+          _buildMethodBar(
+              "Direct Payment (Card/TNG/GrabPay)",
+              directAmt / safeTotal,
+              Colors.cyanAccent,
+              Icons.payments
+          ),
+
+          const Spacer(),
+          Text(
+            "Based on ${total.toInt()} total transactions.", // Changed RM to transactions
+            style: const TextStyle(color: Colors.white10, fontSize: 10),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMethodBar(String label, double percentage, Color color, IconData icon) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            const Spacer(),
+            Text("${(percentage * 100).toStringAsFixed(0)}%",
+                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: percentage,
+            backgroundColor: Colors.white.withOpacity(0.05),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 10,
+          ),
+        ),
+      ],
     );
   }
 }

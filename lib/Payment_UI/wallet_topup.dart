@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/wallet_service.dart';
 import 'add_payment_method.dart';
 import 'package:confetti/confetti.dart';
-
+import 'package:local_auth/local_auth.dart';
 class WalletTopUp extends StatefulWidget {
   const WalletTopUp({super.key});
 
@@ -15,7 +15,7 @@ class _WalletTopUpState extends State<WalletTopUp> {
   final TextEditingController _amountController = TextEditingController();
   final PageController _cardController = PageController(viewportFraction: 0.85);
   late ConfettiController _confettiController;
-
+  final LocalAuthentication auth = LocalAuthentication();
   final List<double> _amounts = [10.0, 50.0, 100.0, 200.0];
 
   List<Map<String, dynamic>> _savedMethods = [];
@@ -203,10 +203,28 @@ class _WalletTopUpState extends State<WalletTopUp> {
       return;
     }
 
+    // --- BIOMETRIC AUTHENTICATION (Exactly from Payment page) ---
+    try {
+      bool canCheck = await auth.canCheckBiometrics;
+      bool isSupported = await auth.isDeviceSupported();
+      if (canCheck || isSupported) {
+        bool didAuthenticate = await auth.authenticate(
+          localizedReason: 'Please authenticate to complete your top-up',
+          biometricOnly: false,
+          persistAcrossBackgrounding: true,
+        );
+        if (!didAuthenticate) return; // Stop if user cancels or fails
+      }
+    } catch (e) {
+      _showErrorSnackBar("Security Error: $e");
+      return;
+    }
+    // --- END OF AUTHENTICATION ---
+
     setState(() => _isProcessing = true);
 
     try {
-      String refId = "PAY-${DateTime.now().millisecondsSinceEpoch}";
+      String refId = "TOP-${DateTime.now().millisecondsSinceEpoch}";
 
       // Use the safe local variable 'method' instead of '_selectedMethod!'
       int paymentMethodId = method['id'];

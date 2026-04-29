@@ -93,15 +93,9 @@ class PaymentService {
   }) async {
     // Mark payment as success
     await _supabase.from('payment').update({
-      'status': 'success',
+      'status': 'paid',
       'payment_method': method,
     }).eq('payment_id', paymentId);
-
-    // Update the booking itself to 'Paid'
-    await _supabase
-        .from('booking')
-        .update({'booking_status': 'Paid'})
-        .eq('booking_id', bookingId);
   }
 
   // UPDATE (Soft Delete): Mark as refunded
@@ -201,7 +195,6 @@ class PaymentService {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
-                        pw.Text("RECEIPT NO: TXN-$paymentId", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                         pw.Text("DATE: $formattedDate"),
                         pw.Text("TIME: $formattedTime"),
                       ],
@@ -296,7 +289,7 @@ class PaymentService {
       );
 
       final output = await getTemporaryDirectory();
-      final file = File("${output.path}/Receipt_TXN_$paymentId.pdf");
+      final file = File("${output.path}/Receipt_$formattedDate.pdf");
       await file.writeAsBytes(await pdf.save());
       await Share.shareXFiles([XFile(file.path)], text: 'Transaction Receipt');
 
