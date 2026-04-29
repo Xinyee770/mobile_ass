@@ -828,10 +828,40 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> deleteCourse(dynamic courseId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: cardBg,
+        title: Text(
+          "Confirm Delete",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          "Are you sure you want to delete this class?",
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF9D59FF), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       await supabase.from('courses').delete().eq('course_id', courseId);
+
       await loadData();
-      showMsg("Class deleted successfully");
+
+      showMsg("Class deleted successfully", color: Colors.green);
     } catch (e) {
       showMsg("Delete failed: $e");
       debugPrint("DELETE COURSE ERROR: $e");
@@ -1118,8 +1148,40 @@ class _AdminState extends State<Admin> {
   }
 
   Future<void> deleteUser(dynamic userId) async {
-    await supabase.from('profiles').delete().eq('id', userId);
-    loadData();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: cardBg,
+        title: Text("Confirm Delete", style: TextStyle(color: Colors.white)),
+        content: Text(
+          "Are you sure you want to delete this user?",
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF9D59FF), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Delete"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await supabase.from('profiles').delete().eq('id', userId);
+
+      await loadData();
+
+      showMsg("User deleted successfully", color: Colors.green);
+    } catch (e) {
+      showMsg("Delete failed: $e");
+    }
   }
 
   // =========================
