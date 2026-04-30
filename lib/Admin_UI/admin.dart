@@ -4,10 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../Authentication_UI/login.dart';
-import 'package:fl_chart/fl_chart.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 class Admin extends StatefulWidget {
   const Admin({super.key});
@@ -31,10 +27,7 @@ class _AdminState extends State<Admin> {
   List<Map<String, dynamic>> users = [];
   List<Map<String, dynamic>> bookings = [];
   List<Map<String, dynamic>> payments = [];
-  List<Map<String, dynamic>> attendanceList = [];
   List<Map<String, dynamic>> instructors = [];
-
-  String attendanceSearch = "";
 
   final TextEditingController searchController = TextEditingController();
   String searchText = "";
@@ -68,17 +61,11 @@ class _AdminState extends State<Admin> {
       final paymentData = await supabase.from('payment').select();
       final instructorData = await supabase.from('instructor').select();
 
-      final attendanceData = await supabase
-          .from('attendance')
-          .select()
-          .order('attendance_date', ascending: false);
-
       setState(() {
         courses = List<Map<String, dynamic>>.from(courseData);
         users = List<Map<String, dynamic>>.from(userData);
         bookings = List<Map<String, dynamic>>.from(bookingData);
         payments = List<Map<String, dynamic>>.from(paymentData);
-        attendanceList = List<Map<String, dynamic>>.from(attendanceData);
         instructors = List<Map<String, dynamic>>.from(instructorData);
         loading = false;
       });
@@ -296,107 +283,6 @@ class _AdminState extends State<Admin> {
     );
   }
 
-  // =========================
-  // EXPORT PDF
-  // =========================
-
-  Future<void> generateAdminReportPDF({
-    required double totalRevenue,
-    required int activeMembers,
-    required int totalClasses,
-    required int totalBookings,
-    required String topClassName,
-    required int maxBooking,
-    required double avgRevenue,
-    required Map<String, int> courseCount,
-  }) async {
-    final pdf = pw.Document();
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        build: (pw.Context context) {
-          return pw.Padding(
-            padding: const pw.EdgeInsets.all(24),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  "Admin Analytics Report",
-                  style: pw.TextStyle(
-                    fontSize: 24,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  "Generated on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}",
-                ),
-                pw.Divider(),
-                pw.SizedBox(height: 16),
-
-                reportRow("Total Revenue", "RM ${totalRevenue.toStringAsFixed(2)}"),
-                reportRow("Active Members", activeMembers.toString()),
-                reportRow("Total Classes", totalClasses.toString()),
-                reportRow("Total Bookings", totalBookings.toString()),
-                reportRow("Top Class", topClassName),
-                reportRow("Peak Booking", "$maxBooking bookings"),
-                reportRow("Average Revenue", "RM ${avgRevenue.toStringAsFixed(2)}"),
-
-                pw.SizedBox(height: 20),
-
-                pw.Text(
-                  "Detailed Booking Classes",
-                  style: pw.TextStyle(
-                    fontSize: 18,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
-
-                pw.SizedBox(height: 10),
-
-                pw.TableHelper.fromTextArray(
-                  headers: ["Class Name", "Booking Count"],
-                  data: courseCount.entries.map((entry) {
-                    final course = courses.firstWhere(
-                          (c) => c['course_id'].toString() == entry.key,
-                      orElse: () => {},
-                    );
-
-                    final courseName = course.isNotEmpty
-                        ? course['course_name'].toString()
-                        : "Course ${entry.key}";
-
-                    return [
-                      courseName,
-                      entry.value.toString(),
-                    ];
-                  }).toList(),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-    );
-  }
-
-  pw.Widget reportRow(String title, String value) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 12),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(title, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-          pw.Text(value),
-        ],
-      ),
-    );
-  }
 
   // =========================
   // CLASSES CRUD
@@ -521,7 +407,9 @@ class _AdminState extends State<Admin> {
     final start = TextEditingController();
     final end = TextEditingController();
     final date = TextEditingController();
+
     String? selectedLocation;
+
     String? nameError;
     String? priceError;
     String? instructorError;
@@ -668,7 +556,6 @@ class _AdminState extends State<Admin> {
                 priceError = "Price must be greater than 0";
                 hasError = true;
               }
-
 
               if (selectedInstructorId == null) {
                 instructorError = "Please select instructor";
@@ -1356,224 +1243,44 @@ class _AdminState extends State<Admin> {
   // =========================
 
   Widget attendancePage() {
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    final todayCount = attendanceList.where((r) {
-      return r['attendance_date']?.toString() == today;
-    }).length;
-
-    final filteredAttendance = attendanceList.where((record) {
-      final user = users.firstWhere(
-            (u) => u['id'].toString() == record['user_id'].toString(),
-        orElse: () => {},
-      );
-
-      final name = user.isNotEmpty
-          ? user['name']?.toString().toLowerCase() ?? ''
-          : '';
-
-      final email = user.isNotEmpty
-          ? user['email']?.toString().toLowerCase() ?? ''
-          : '';
-
-      final keyword = attendanceSearch.toLowerCase();
-
-      return name.contains(keyword) || email.contains(keyword);
-    }).toList();
-
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          adminCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.qr_code_scanner, size: 80, color: accent),
-                SizedBox(height: 14),
-                Text(
-                  "Attendance Tracking",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  "Scan member QR code using camera.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-                SizedBox(height: 20),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF9D59FF),
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => QRScannerPage()),
-                    );
-
-                    await loadData();
-                  },
-                  icon: Icon(Icons.camera_alt),
-                  label: Text("Start Scan"),
-                ),
-              ],
-            ),
-          ),
-
-          SizedBox(height: 12),
-
-          adminCard(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Today Check-in",
-                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                ),
-                Text(
-                  todayCount.toString(),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          SizedBox(height: 10),
-
-          TextField(
-            style: TextStyle(color: Colors.white),
-            onChanged: (value) {
-              setState(() {
-                attendanceSearch = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: "Search attendance by name or email...",
-              hintStyle: TextStyle(color: Colors.grey),
-              prefixIcon: Icon(Icons.search, color: accent),
-              filled: true,
-              fillColor: cardBg,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-
-          SizedBox(height: 14),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Center(
+      child: Padding(
+        padding:  EdgeInsets.all(20),
+        child: adminCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(Icons.qr_code_scanner, size: 90, color: accent),
+              SizedBox(height: 16),
               Text(
-                "Attendance History",
+                "Attendance Tracking",
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 22,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              IconButton(
-                onPressed: loadData,
-                icon: Icon(Icons.refresh, color: accent),
+              SizedBox(height: 8),
+              Text(
+                "Scan member QR code using camera.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              SizedBox(height: 20),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF9D59FF),foregroundColor: Colors.white),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) =>  QRScannerPage()),
+                  );
+                },
+                icon:  Icon(Icons.camera_alt),
+                label:  Text("Start Scan"),
               ),
             ],
           ),
-
-          SizedBox(height: 8),
-
-          Expanded(
-            child: filteredAttendance.isEmpty
-                ? Center(
-              child: Text(
-                "No attendance records found",
-                style: TextStyle(color: Colors.grey),
-              ),
-            )
-                : ListView.builder(
-              itemCount: filteredAttendance.length,
-              itemBuilder: (context, index) {
-                final record = filteredAttendance[index];
-
-                final user = users.firstWhere(
-                      (u) =>
-                  u['id'].toString() ==
-                      record['user_id'].toString(),
-                  orElse: () => {},
-                );
-
-                final name = user.isNotEmpty
-                    ? user['name'] ?? "Unknown Member"
-                    : "Unknown Member";
-
-                final email = user.isNotEmpty
-                    ? user['email'] ?? "-"
-                    : "User ID: ${record['user_id']}";
-
-                return adminCard(
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 34,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              email,
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              "Date: ${record['attendance_date'] ?? '-'}",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              "Status: ${record['status'] ?? '-'}",
-                              style: TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1581,43 +1288,9 @@ class _AdminState extends State<Admin> {
   // =========================
   // STATISTICS REPORT
   // =========================
-  void showBookingChartDialog(Map<String, int> courseCount) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: cardBg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          "Booking Chart",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 420,
-          child: bookingChart(courseCount),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget analyticsPage() {
     double totalRevenue = 0;
-
-    final validBookings = bookings.where((b) {
-      final status = b['booking_status']?.toString().toLowerCase() ?? '';
-      return status == 'confirmed' || status == 'attended';
-    }).toList();
 
     for (final p in payments) {
       totalRevenue += double.tryParse(p['amount']?.toString() ?? '0') ?? 0;
@@ -1628,15 +1301,8 @@ class _AdminState extends State<Admin> {
 
     final Map<String, int> courseCount = {};
 
-    for (final b in validBookings) {
-      final status = b['booking_status']?.toString().toLowerCase() ?? '';
-
-      if (status != 'confirmed' && status != 'attended') {
-        continue;
-      }
-
+    for (final b in bookings) {
       final courseId = b['course_id']?.toString() ?? '';
-
       if (courseId.isNotEmpty) {
         courseCount[courseId] = (courseCount[courseId] ?? 0) + 1;
       }
@@ -1660,10 +1326,10 @@ class _AdminState extends State<Admin> {
       }
     });
 
-    final avgRevenue = validBookings.isEmpty ? 0 : totalRevenue / validBookings.length;
+    final avgRevenue = bookings.isEmpty ? 0 : totalRevenue / bookings.length;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding:  EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1685,52 +1351,33 @@ class _AdminState extends State<Admin> {
 
           SizedBox(height: 18),
 
-          GestureDetector(
-            onTap: () {
-              generateAdminReportPDF(
-                totalRevenue: totalRevenue.toDouble(),
-                activeMembers: activeMembers,
-                totalClasses: courses.length,
-                totalBookings: bookings.length,
-                topClassName: topClassName,
-                maxBooking: maxBooking,
-                avgRevenue: avgRevenue.toDouble(),
-                courseCount: courseCount,
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Color(0xFF9D59FF),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.account_balance_wallet,
-                      color: Colors.white, size: 38),
-                  SizedBox(height: 14),
-                  Text(
-                    "Total Revenue",
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
+          Container(
+            width: double.infinity,
+            padding:  EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color:  Color(0xFF9D59FF),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.account_balance_wallet,
+                    color: Colors.white, size: 38),
+                SizedBox(height: 14),
+                Text(
+                  "Total Revenue",
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  "RM ${totalRevenue.toStringAsFixed(2)}",
+                  style:  TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
                   ),
-                  SizedBox(height: 6),
-                  Text(
-                    "RM ${totalRevenue.toStringAsFixed(2)}",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    "Tap to export PDF report",
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -1739,79 +1386,22 @@ class _AdminState extends State<Admin> {
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
+            physics:  NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             childAspectRatio: 1.0,
             children: [
               statCard("Active Members", activeMembers.toString(), Icons.people),
               statCard("Total Classes", courses.length.toString(), Icons.class_),
-
-              GestureDetector(
-                onTap: () {
-                  showBookingChartDialog(courseCount);
-                },
-                child: statCard(
-                  "Total Bookings",
-                  validBookings.length.toString(),
-                  Icons.event,
-                ),
-              ),
-
-              GestureDetector(
-                onTap: () {
-                  showBookingChartDialog(courseCount);
-                },
-                child: statCard("Top Class", topClassName, Icons.trending_up),
-              ),
-
-              GestureDetector(
-                onTap: () {
-                  showBookingChartDialog(courseCount);
-                },
-                child: statCard(
-                  "Peak Booking",
-                  "$maxBooking bookings",
-                  Icons.bar_chart,
-                ),
-              ),
-
+              statCard("Total Bookings", bookings.length.toString(), Icons.event),
+              statCard("Top Class", topClassName, Icons.trending_up),
+              statCard("Peak Booking", "$maxBooking bookings", Icons.bar_chart),
               statCard(
                 "Avg Revenue",
                 "RM ${avgRevenue.toStringAsFixed(2)}",
                 Icons.payments,
               ),
             ],
-          ),
-
-          SizedBox(height: 12),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: cardBg,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              onPressed: () {
-                generateAdminReportPDF(
-                  totalRevenue: totalRevenue.toDouble(),
-                  activeMembers: activeMembers,
-                  totalClasses: courses.length,
-                  totalBookings: bookings.length,
-                  topClassName: topClassName,
-                  maxBooking: maxBooking,
-                  avgRevenue: avgRevenue.toDouble(),
-                  courseCount: courseCount,
-                );
-              },
-              icon: Icon(Icons.picture_as_pdf),
-              label: Text("Export PDF Report"),
-            ),
           ),
         ],
       ),
@@ -1941,102 +1531,6 @@ class _AdminState extends State<Admin> {
       child: Text(text, style:  TextStyle(color: Colors.grey)),
     );
   }
-
-  Widget bookingChart(Map<String, int> courseCount) {
-    if (courseCount.isEmpty) {
-      return Center(
-        child: Text("No booking data", style: TextStyle(color: Colors.grey)),
-      );
-    }
-
-    final entries = courseCount.entries.toList();
-    final total = entries.fold<int>(0, (sum, e) => sum + e.value);
-
-    final colors = [
-      Color(0xFF9D59FF),
-      Color(0xFFC7A6FF),
-      Color(0xFF7B3FE4),
-      Color(0xFFB983FF),
-      Color(0xFF5E35B1),
-    ];
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 240,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 3,
-              centerSpaceRadius: 45,
-              sections: List.generate(entries.length, (index) {
-                final entry = entries[index];
-                final percent = total == 0 ? 0 : (entry.value / total) * 100;
-
-                return PieChartSectionData(
-                  color: colors[index % colors.length],
-                  value: entry.value.toDouble(),
-                  title: "${percent.toStringAsFixed(0)}%\n${entry.value}",
-                  radius: 85,
-                  titleStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-
-        SizedBox(height: 16),
-
-        Column(
-          children: List.generate(entries.length, (index) {
-            final entry = entries[index];
-            final percent = total == 0 ? 0 : (entry.value / total) * 100;
-
-            final course = courses.firstWhere(
-                  (c) => c['course_id'].toString() == entry.key,
-              orElse: () => {},
-            );
-
-            final courseName = course.isNotEmpty
-                ? course['course_name'].toString()
-                : "Course ${entry.key}";
-
-            return Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: colors[index % colors.length],
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      courseName,
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    "${entry.value} bookings • ${percent.toStringAsFixed(0)}%",
-                    style: TextStyle(color: Colors.white, fontSize: 12),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ),
-      ],
-    );
-  }
-
 }
 
 // =========================
@@ -2088,7 +1582,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
       final currentTime = DateFormat('HH:mm:ss').format(now);
 
       final startTimeWithGrace = DateFormat('HH:mm:ss').format(
-        now.add( Duration(minutes: 15)),
+        now.add(const Duration(minutes: 15)),
       );
 
       if (userId.isEmpty) {
@@ -2171,17 +1665,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor:  Color(0xFF1E1E2C),
+        backgroundColor: const Color(0xFF1E1E2C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style:  TextStyle(color: Colors.white)),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             Icon(Icons.error, color: Colors.red, size: 60),
-             SizedBox(height: 12),
+            const Icon(Icons.error, color: Colors.red, size: 60),
+            const SizedBox(height: 12),
             Text(
               message,
-              style:  TextStyle(color: Colors.white70),
+              style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
           ],
@@ -2189,7 +1683,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child:  Text("OK"),
+            child: const Text("OK"),
           ),
         ],
       ),
@@ -2203,29 +1697,29 @@ class _QRScannerPageState extends State<QRScannerPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor:  Color(0xFF1E1E2C),
+        backgroundColor: const Color(0xFF1E1E2C),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title:  Text(
+        title: const Text(
           "Check-in Successful",
           style: TextStyle(color: Colors.white),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-             Icon(Icons.check_circle, color: Colors.green, size: 70),
-             SizedBox(height: 12),
+            const Icon(Icons.check_circle, color: Colors.green, size: 70),
+            const SizedBox(height: 12),
             Text(
               name,
-              style:  TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
-             SizedBox(height: 6),
+            const SizedBox(height: 6),
             Text(
               email,
-              style:  TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
           ],
@@ -2236,7 +1730,7 @@ class _QRScannerPageState extends State<QRScannerPage> {
               Navigator.pop(context);
               setState(() => scanned = false);
             },
-            child:  Text("Done"),
+            child: const Text("Done"),
           ),
         ],
       ),
@@ -2287,17 +1781,17 @@ class _QRScannerPageState extends State<QRScannerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:  Color(0xFF1A1A1A),
+      backgroundColor: const Color(0xFF1A1A1A),
       appBar: AppBar(
-        backgroundColor:  Color(0xFF3B2F4F),
-        title:  Text(
+        backgroundColor: const Color(0xFF3B2F4F),
+        title: const Text(
           "Scan Attendance QR",
           style: TextStyle(color: Colors.white),
         ),
-        iconTheme:  IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon:  Icon(Icons.image),
+            icon: const Icon(Icons.image),
             onPressed: scanFromImage,
           ),
         ],
@@ -2322,12 +1816,12 @@ class _QRScannerPageState extends State<QRScannerPage> {
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding:  EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:  Color(0xFF9D59FF),
+                  backgroundColor: const Color(0xFF9D59FF),
                   foregroundColor: Colors.white,
-                  padding:  EdgeInsets.symmetric(
+                  padding: const EdgeInsets.symmetric(
                     horizontal: 22,
                     vertical: 14,
                   ),
@@ -2336,8 +1830,8 @@ class _QRScannerPageState extends State<QRScannerPage> {
                   ),
                 ),
                 onPressed: scanFromImage,
-                icon:  Icon(Icons.image_search),
-                label:  Text("Scan QR From Image"),
+                icon: const Icon(Icons.image_search),
+                label: const Text("Scan QR From Image"),
               ),
             ),
           ),
